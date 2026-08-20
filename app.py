@@ -73,17 +73,10 @@ a:hover{color:#c4b5fd}
 code{background:rgba(124,58,237,.12);padding:2px 8px;border-radius:6px;font-size:.88em;color:var(--pl);border:1px solid rgba(124,58,237,.15)}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes slideR{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:translateX(0)}}
 @keyframes float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-14px) rotate(3deg)}}
 @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(124,58,237,.2)}50%{box-shadow:0 0 40px rgba(124,58,237,.4),0 0 80px rgba(124,58,237,.1)}}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.15);opacity:1}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-@keyframes borderFlow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-@keyframes bounceIn{0%{transform:scale(.3);opacity:0}50%{transform:scale(1.05)}70%{transform:scale(.95)}100%{transform:scale(1);opacity:1}}
-@keyframes typewriter{from{width:0}to{width:100%}}
-@keyframes blink{50%{border-color:transparent}}
 
 .bg-grid{position:fixed;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(124,58,237,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(124,58,237,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
 .bg-glow{position:fixed;width:600px;height:600px;border-radius:50%;filter:blur(120px);pointer-events:none;z-index:0;opacity:.12}
@@ -233,13 +226,13 @@ c.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%')})});
 });
 """
 
-DESC_PLACEHOLDER = "PLACEHOLDER_DESC"
-TITLE_PLACEHOLDER = "PLACEHOLDER_TITLE"
+DESC_PH = "PLACEHOLDER_DESC"
+TITLE_PH = "PLACEHOLDER_TITLE"
 
 SITE_HTML = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
 SITE_HTML += '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-SITE_HTML += '<meta name="description" content="' + DESC_PLACEHOLDER + '">\n'
-SITE_HTML += '<title>' + TITLE_PLACEHOLDER + '</title>\n'
+SITE_HTML += '<meta name="description" content="' + DESC_PH + '">\n'
+SITE_HTML += '<title>' + TITLE_PH + '</title>\n'
 SITE_HTML += '<style>' + CSS + '</style>\n</head>\n<body>\n'
 SITE_HTML += '<div class="bg-grid"></div><div class="bg-glow bg-glow-1"></div><div class="bg-glow bg-glow-2"></div>\n'
 SITE_HTML += '<canvas id="particles"></canvas>\n'
@@ -341,7 +334,7 @@ SITE_HTML += ".catch(function(){document.getElementById('sgrid').innerHTML='<p s
 SITE_HTML += "</script>\n</body>\n</html>\n"
 
 def build_main_page():
-    return SITE_HTML.replace(DESC_PLACEHOLDER, RELEASE_NAME + " - A Fabric-based Minecraft " + MC_VER + " client").replace(TITLE_PLACEHOLDER, RELEASE_NAME + " | unkk client")
+    return SITE_HTML.replace(DESC_PH, RELEASE_NAME + " - A Fabric-based Minecraft " + MC_VER + " client").replace(TITLE_PH, RELEASE_NAME + " | unkk client")
 
 @app.route("/")
 def home():
