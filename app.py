@@ -4,7 +4,9 @@ import time
 import hashlib
 import threading
 import uuid
+import base64
 import urllib.request
+import urllib.error
 from functools import wraps
 from flask import Flask, request, redirect, Response, session, url_for, jsonify
 
@@ -20,6 +22,7 @@ GITHUB_REPO = "awdawdfawdAWD/Minecraft-web"
 GITHUB_CLIENT_REPO = "awdawdfawdAWD/MC-CLIENT"
 GITHUB_SCREENSHOTS_FOLDER = "screenshots"
 GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_SCREENSHOTS_FOLDER}"
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 DOWNLOAD_COUNT = 147
 APP_START_TIME = time.time()
@@ -27,25 +30,133 @@ APP_START_TIME = time.time()
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 PLAYERS_FILE = "players.json"
+MC_TOKENS_FILE = "mc_tokens.json"
+
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
+
+class GitHubStorage:
+    def __init__(self):
+        self.cache = {}
+        self.shas = {}
+        self.lock = threading.Lock()
+
+    def _github_request(self, path, method="GET", content=None, message=None):
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "unkk-site",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
+
+        data = None
+        if method in ("PUT", "POST"):
+            body = {"message": message or f"Update {path}", "branch": "main"}
+            if content is not None:
+                body["content"] = base64.b64encode(content.encode()).encode().decode()
+            if path in self.shas:
+                body["sha"] = self.shas[path]
+            data = json.dumps(body).encode()
+
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            if method == "GET":
+                raw = resp.read()
+                return json.loads(raw) if raw else None
+            else:
+                raw = resp.read()
+                result = json.loads(raw) if raw else {}
+                if "content" in result and "sha" in result["content"]:
+                    self.shas[path] = result["content"]["sha"]
+                return result
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and method == "GET":
+                return None
+            print(f"[GitHubStorage] API error {e.code} for {path}: {e.read().decode()[:200]}")
+            return None
+        except Exception as e:
+            print(f"[GitHubStorage] Request failed for {path}: {e}")
+            return None
+
+    def load(self, filename, default=None):
+        if default is None:
+            default = {}
+        with self.lock:
+            if filename in self.cache:
+                return self.cache[filename]
+
+            try:
+                data = self._github_request(filename)
+                if data and "content" in data:
+                    content = base64.b64decode(data["content"]).decode().strip()
+                    self.cache[filename] = json.loads(content)
+                    self.shas[filename] = data.get("sha")
+                    print(f"[GitHubStorage] Loaded {filename} from GitHub")
+                    return self.cache[filename]
+            except Exception as e:
+                print(f"[GitHubStorage] Failed to load {filename} from GitHub: {e}")
+
+            try:
+                if os.path.exists(filename):
+                    with open(filename, "r") as f:
+                        self.cache[filename] = json.load(f)
+                        print(f"[GitHubStorage] Loaded {filename} from local fallback")
+                        return self.cache[filename]
+            except Exception:
+                pass
+
+            self.cache[filename] = default
+            return default
+
+    def save(self, filename, data):
+        with self.lock:
+            self.cache[filename] = data
+            content_str = json.dumps(data, indent=2)
+
+            try:
+                result = self._github_request(
+                    filename,
+                    method="PUT",
+                    content=content_str,
+                    message=f"Update {filename} ({time.strftime('%Y-%m-%d %H:%M:%S')})"
+                )
+                if result:
+                    print(f"[GitHubStorage] Saved {filename} to GitHub")
+                else:
+                    print(f"[GitHubStorage] GitHub save failed for {filename}, writing locally")
+            except Exception as e:
+                print(f"[GitHubStorage] GitHub save error for {filename}: {e}")
+
+            try:
+                with open(filename, "w") as f:
+                    f.write(content_str)
+            except Exception:
+                pass
+
+
+storage = GitHubStorage()
+
+
 def load_players():
-    try:
-        if os.path.exists(PLAYERS_FILE):
-            with open(PLAYERS_FILE, "r") as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {}
+    return storage.load(PLAYERS_FILE, default={})
+
 
 def save_players(data):
-    try:
-        with open(PLAYERS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"Error saving players: {e}")
+    storage.save(PLAYERS_FILE, data)
+
+
+def load_mc_tokens():
+    return storage.load(MC_TOKENS_FILE, default={})
+
+
+def save_mc_tokens(data):
+    storage.save(MC_TOKENS_FILE, data)
+
 
 def require_player_login(f):
     @wraps(f)
@@ -54,6 +165,7 @@ def require_player_login(f):
             return redirect(url_for("player_login_page"))
         return f(*args, **kwargs)
     return decorated
+
 
 def fetch_latest_version():
     global _version_cache, _version_cache_time
@@ -361,12 +473,12 @@ var currentLightboxIndex = 0;
 function buildShowcase() {
   var grid = document.getElementById('showcase-grid');
   if (!currentImages || currentImages.length === 0) {
-    grid.innerHTML = '<div class="showcase-empty">No screenshots yet. Upload images to the <code style="color:var(--accent)">screenshots/</code> folder in the GitHub repo.</div>';
+    grid.innerHTML = '<div class="showcase-empty">Screenshots coming soon. Check back later.</div>';
     return;
   }
   var html = '';
   currentImages.forEach(function(img, i) {
-    html += '<div class="showcase-item" onclick="openLightboxAt(' + i + ')"><img src="' + img.url + '" alt="' + img.name + '" loading="lazy"><div class="overlay"><span>' + img.name + '</span></div></div>';
+    html += '<div class="showcase-item" onclick="openLightboxAt(' + i + ')"><img src="' + img.url + '" alt="' + img.name + '" loading="lazy"><div class="overlay"><span>' + img.name.replace(/_/g, ' ').replace(/\\.png|\\.jpg|\\.jpeg/gi, '') + '</span></div></div>';
   });
   grid.innerHTML = html;
   grid.querySelectorAll('.reveal').forEach(function(el) { observer.observe(el); });
@@ -604,7 +716,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
     <div class="panel">
       <h3>Screenshots</h3>
-      <p style="font-size:0.82rem;color:var(--muted)">Upload images to <code style="color:var(--accent)">screenshots/</code> in the GitHub repo.</p>
+      <p style="font-size:0.82rem;color:var(--muted)">Upload images to <code style="color:var(--accent)">screenshots/</code> in the GitHub repo. They auto-load on the site.</p>
     </div>
   </div>
   <div class="tab-content" id="tab-players">
@@ -840,6 +952,7 @@ body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min
 h2{font-size:1.3rem;font-weight:700;margin-bottom:6px;text-align:center}
 .sub{font-size:0.8rem;color:#8a877e;text-align:center;margin-bottom:30px}
 .error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
+.success{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);color:#22c55e;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
 label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
 input{width:100%;padding:12px 14px;background:rgba(12,12,16,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;outline:none;transition:border-color 0.2s;margin-bottom:20px}
 input:focus{border-color:#a855f7}
@@ -984,6 +1097,7 @@ def player_profile():
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh}}
+body::before{{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:0.5}}
 .dash-nav{{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);border-bottom:1px solid rgba(255,255,255,0.04);backdrop-filter:blur(20px)}}
 .dash-nav .logo{{font-weight:700;font-size:1rem}}.dash-nav .logo span{{color:#a855f7}}
 .dash-nav .right{{display:flex;gap:12px;align-items:center}}
@@ -1038,25 +1152,6 @@ def player_logout():
     session.pop("player_logged_in", None)
     session.pop("player_user", None)
     return redirect(url_for("home_redirect"))
-
-
-MC_TOKENS_FILE = "mc_tokens.json"
-
-def load_mc_tokens():
-    try:
-        if os.path.exists(MC_TOKENS_FILE):
-            with open(MC_TOKENS_FILE, "r") as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {}
-
-def save_mc_tokens(data):
-    try:
-        with open(MC_TOKENS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"Error saving mc tokens: {e}")
 
 
 MC_LOGIN_HTML = """<!DOCTYPE html>
@@ -1248,7 +1343,15 @@ def mc_login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        if username == OWNER_USERNAME and password == OWNER_PASSWORD:
+        players = load_players()
+        if username in players and players[username]["pw"] == hash_pw(password):
+            tokens = load_mc_tokens()
+            if form_token in tokens:
+                tokens[form_token]["authenticated"] = True
+                tokens[form_token]["web_username"] = username
+                save_mc_tokens(tokens)
+                return Response(MC_SUCCESS_HTML, content_type="text/html")
+        elif username == OWNER_USERNAME and password == OWNER_PASSWORD:
             tokens = load_mc_tokens()
             if form_token in tokens:
                 tokens[form_token]["authenticated"] = True
