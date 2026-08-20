@@ -481,7 +481,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>unkk - login</title>
+<title>unkk - staff login</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -503,8 +503,8 @@ button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px
 <body>
 <div class="bg"></div>
 <div class="card">
-  <h2>owner access</h2>
-  <div class="sub">authenticate to continue</div>
+  <h2>&#x1F6E1;&#xFE0F; Staff Login</h2>
+  <div class="sub">staff authentication required</div>
   ERROR_PLACEHOLDER
   <form method="POST">
     <label>username</label>
@@ -524,78 +524,106 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>unkk - dashboard</title>
+<title>unkk - staff panel</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh}
-.dash-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);border-bottom:1px solid rgba(255,255,255,0.04);backdrop-filter:blur(20px)}
-.dash-nav .logo{font-weight:700;font-size:1rem}.dash-nav .logo span{color:#a855f7}
-.dash-nav .right{display:flex;gap:12px;align-items:center}
-.dash-nav a,.dash-nav button{font-size:0.8rem;color:#8a877e;text-decoration:none;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;font-family:inherit;transition:all 0.2s}
-.dash-nav a:hover,.dash-nav button:hover{color:#f0ede8;background:rgba(255,255,255,0.05)}
-.dash-nav .logout{color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
-.dash-nav .logout:hover{background:rgba(239,68,68,0.1)}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--ink:#0c0c10;--paper:#f0ede8;--muted:#8a877e;--accent:#a855f7;--green:#22c55e;--red:#ef4444;--card:#16161c;--card-border:#2a2a35;--font:'Space Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
+body{font-family:var(--font);background:var(--ink);color:var(--paper);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:0.5}
+.topnav{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.04)}
+.nav-logo{font-weight:700;font-size:1rem;letter-spacing:-0.5px}.nav-logo span{color:var(--accent)}
+.nav-right{display:flex;gap:8px;align-items:center}
+.nav-right a,.nav-right button{font-family:var(--font);font-size:0.8rem;font-weight:500;color:var(--muted);text-decoration:none;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;transition:all 0.2s}
+.nav-right a:hover,.nav-right button:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
+.nav-right .logout{color:var(--red);border:1px solid rgba(239,68,68,0.15);background:rgba(239,68,68,0.05)}
+.nav-right .logout:hover{background:rgba(239,68,68,0.1)}
 .container{max-width:1000px;margin:0 auto;padding:40px}
-.section-title{font-size:0.72rem;color:#a855f7;text-transform:uppercase;letter-spacing:2px;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
-h1{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
-.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:40px}
-.stat-card{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:24px}
-.stat-card .val{font-size:2rem;font-weight:700;font-family:'JetBrains Mono',monospace;margin-bottom:4px}
-.stat-card .lbl{font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px}
-.panel{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:30px;margin-bottom:20px}
-.panel h3{font-size:0.95rem;font-weight:600;margin-bottom:20px}
+.tag{font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+h1{font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
+h1 em{font-style:normal;color:var(--accent)}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px}
+.stat-card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:22px;transition:all 0.3s}
+.stat-card:hover{border-color:rgba(168,85,247,0.2);transform:translateY(-2px)}
+.stat-card .val{font-size:1.8rem;font-weight:700;font-family:var(--mono);margin-bottom:4px}
+.stat-card .lbl{font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.tab-bar{display:flex;gap:4px;margin-bottom:30px;background:var(--card);border-radius:12px;padding:5px;width:fit-content}
+.tab-btn{font-family:var(--font);font-size:0.82rem;font-weight:500;padding:10px 22px;border:none;border-radius:8px;background:none;color:var(--muted);cursor:pointer;transition:all 0.25s}
+.tab-btn.active{background:var(--accent);color:#fff}
+.tab-btn:hover:not(.active){color:var(--paper);background:rgba(255,255,255,0.04)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.panel{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:28px;margin-bottom:20px}
+.panel h3{font-size:0.95rem;font-weight:600;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;padding:12px 16px;border-bottom:1px solid var(--card-border);font-family:var(--mono)}
+td{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:0.85rem}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.badge-green{background:rgba(34,197,94,0.1);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+.badge-red{background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+.badge-purple{background:rgba(168,85,247,0.1);color:var(--accent);border:1px solid rgba(168,85,247,0.2)}
+.hwid{font-family:var(--mono);font-size:0.72rem;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-sm{padding:5px 12px;border-radius:6px;font-family:var(--font);font-size:0.72rem;font-weight:600;border:none;cursor:pointer;transition:all 0.2s}
+.btn-reset{background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.15)}
+.btn-reset:hover{background:rgba(239,68,68,0.2)}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:0.85rem}
 .info-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.85rem;gap:20px;word-break:break-all}
 .info-row:last-child{border-bottom:none}
-.info-row .k{color:#8a877e;min-width:100px;flex-shrink:0}
-.info-row .v{color:#f0ede8;font-family:'JetBrains Mono',monospace;font-size:0.75rem}
-.code-block{background:#0a0a0e;border:1px solid rgba(255,255,255,0.04);border-radius:8px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:#a855f7;overflow-x:auto;white-space:pre;margin-top:12px}
+.info-row .k{color:var(--muted);min-width:120px;flex-shrink:0}
+.info-row .v{font-family:var(--mono);font-size:0.75rem}
 </style>
 </head>
 <body>
-<div class="dash-nav">
-  <div class="logo">unk<span>k</span> dashboard</div>
-  <div class="right">
+<div class="topnav">
+  <div class="nav-logo">unk<span>k</span> staff</div>
+  <div class="nav-right">
     <a href="/">view site</a>
-    <a href="/dashboard/edit" style="color:#a855f7">edit links</a>
+    <a href="/dashboard/edit">edit links</a>
     <button class="logout" onclick="location.href='/logout'">sign out</button>
   </div>
 </div>
 <div class="container">
-  <div class="section-title">// overview</div>
+  <div class="tag">// staff panel</div>
   <h1>Dashboard</h1>
   <div class="stat-row">
-    <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Total Downloads</div></div>
-    <div class="stat-card"><div class="val">%%VERSION%%</div><div class="lbl">Current Version</div></div>
+    <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Downloads</div></div>
+    <div class="stat-card"><div class="val">%%PLAYER_COUNT%%</div><div class="lbl">Players</div></div>
+    <div class="stat-card"><div class="val">%%VERSION%%</div><div class="lbl">Client Version</div></div>
     <div class="stat-card"><div class="val" id="uptime-val">--</div><div class="lbl">Uptime</div></div>
   </div>
-  <div class="panel">
-    <h3>Download Links</h3>
-    <div class="info-row"><span class="k">Client JAR</span><span class="v">%%CLIENT_URL%%</span></div>
-    <div class="info-row"><span class="k">Fabric API</span><span class="v">%%FABRIC_URL%%</span></div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab(this,'tab-overview')">Overview</button>
+    <button class="tab-btn" onclick="switchTab(this,'tab-players')">Players</button>
   </div>
-  <div class="panel">
-    <h3>Env Variables for Render</h3>
-    <div class="info-row"><span class="k">FLASK_SECRET_KEY</span><span class="v">any random string (use os.urandom(32).hex())</span></div>
-    <div class="info-row"><span class="k">OWNER_USER</span><span class="v">your login username</span></div>
-    <div class="info-row"><span class="k">OWNER_PASS</span><span class="v">your login password</span></div>
+  <div class="tab-content active" id="tab-overview">
+    <div class="panel">
+      <h3>Download Links</h3>
+      <div class="info-row"><span class="k">Client JAR</span><span class="v">%%CLIENT_URL%%</span></div>
+      <div class="info-row"><span class="k">Fabric API</span><span class="v">%%FABRIC_URL%%</span></div>
+    </div>
+    <div class="panel">
+      <h3>Screenshots</h3>
+      <p style="font-size:0.82rem;color:var(--muted)">Upload images to <code style="color:var(--accent)">screenshots/</code> in the GitHub repo.</p>
+    </div>
   </div>
-  <div class="panel">
-    <h3>Screenshots</h3>
-    <p style="font-size:0.85rem;color:#8a877e;margin-bottom:16px">Upload images to the <code style="color:#a855f7;background:rgba(168,85,247,0.1);padding:2px 8px;border-radius:4px">screenshots/</code> folder in your GitHub repo. The site auto-loads all image files from there.</p>
-    <div class="code-block">Minecraft-web/
-  screenshots/
-    screenshot1.png
-    screenshot2.jpg
-    gameplay.gif
-    ...</div>
-    screenshot1.png
-    screenshot2.jpg
-    gameplay.gif
-    ...</div>
+  <div class="tab-content" id="tab-players">
+    <div class="panel">
+      <h3>Registered Players (%%PLAYER_COUNT%%)</h3>
+      <table>
+        <thead><tr><th>Username</th><th>Email</th><th>HWID</th><th>Joined</th><th>Action</th></tr></thead>
+        <tbody>%%PLAYER_ROWS%%</tbody>
+      </table>
+    </div>
   </div>
 </div>
 <script>
+function switchTab(btn, tabId) {
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById(tabId).classList.add('active');
+}
 var start = %%SERVER_START%%;
 function fmt(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=s%60,p=[];if(d)p.push(d+"d");if(h)p.push(h+"h");if(m)p.push(m+"m");p.push(sec+"s");return p.join(" ")}
 setInterval(function(){document.getElementById("uptime-val").innerText=fmt(Math.floor(Date.now()/1000-start))},1000);
@@ -745,13 +773,36 @@ def admin_dashboard():
     version_short = version_info["version"] if version_info else "62.0.0"
     client_url = version_info["client_url"] if version_info else CLIENT_URL
     fabric_url = version_info["fabric_url"] if version_info else FABRIC_API_URL
+    players = load_players()
+    player_rows = ""
+    for uname, pdata in players.items():
+        joined = time.strftime("%Y-%m-%d", time.gmtime(pdata.get("joined", 0)))
+        hwid = pdata.get("hwid", "Not set")
+        hwid_short = hwid[:20] + "..." if len(hwid) > 20 else hwid
+        email = pdata.get("email", "")
+        player_rows += f'<tr><td><strong>{uname}</strong></td><td>{email}</td><td class="hwid" title="{hwid}">{hwid_short}</td><td>{joined}</td><td><form method="POST" action="/staff/reset-hwid" style="display:inline"><input type="hidden" name="username" value="{uname}"><button class="btn-sm btn-reset" type="submit">Reset HWID</button></form></td></tr>'
+    if not player_rows:
+        player_rows = '<tr><td colspan="5" class="empty">No players registered yet</td></tr>'
     page = DASHBOARD_HTML
     page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
     page = page.replace("%%CLIENT_URL%%", client_url)
     page = page.replace("%%FABRIC_URL%%", fabric_url)
     page = page.replace("%%SERVER_START%%", str(int(APP_START_TIME)))
     page = page.replace("%%VERSION%%", version_short)
+    page = page.replace("%%PLAYER_COUNT%%", str(len(players)))
+    page = page.replace("%%PLAYER_ROWS%%", player_rows)
     return Response(page, content_type="text/html")
+
+
+@app.route("/staff/reset-hwid", methods=["POST"])
+@require_login
+def reset_hwid():
+    username = request.form.get("username", "")
+    players = load_players()
+    if username in players:
+        players[username]["hwid"] = ""
+        save_players(players)
+    return redirect(url_for("admin_dashboard"))
 
 
 @app.route("/dashboard/edit", methods=["GET", "POST"])
@@ -1121,6 +1172,54 @@ def mc_auth_check():
         "authenticated": entry["authenticated"],
         "mc_username": entry["mc_username"],
         "web_username": entry.get("web_username")
+    })
+
+
+@app.route("/api/player/auth", methods=["POST"])
+def player_auth():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    hwid = data.get("hwid", "").strip()
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    players = load_players()
+    if username not in players:
+        return jsonify({"error": "Account not found. Register on the website first."}), 401
+    if players[username]["pw"] != hash_pw(password):
+        return jsonify({"error": "Invalid password"}), 401
+    if hwid:
+        stored_hwid = players[username].get("hwid", "")
+        if not stored_hwid:
+            players[username]["hwid"] = hwid
+            save_players(players)
+            return jsonify({"success": True, "username": username, "hwid_bound": True, "message": "HWID bound successfully"})
+        elif stored_hwid != hwid:
+            return jsonify({"error": "HWID mismatch. Contact the owner or a mod to reset your HWID."}), 403
+        else:
+            return jsonify({"success": True, "username": username, "hwid_bound": True, "message": "Authenticated"})
+    return jsonify({"success": True, "username": username, "hwid_bound": False, "message": "No HWID provided"})
+
+
+@app.route("/api/player/check-hwid", methods=["POST"])
+def player_check_hwid():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    username = data.get("username", "").strip()
+    hwid = data.get("hwid", "").strip()
+    if not username or not hwid:
+        return jsonify({"error": "username and hwid required"}), 400
+    players = load_players()
+    if username not in players:
+        return jsonify({"error": "Account not found"}), 404
+    stored_hwid = players[username].get("hwid", "")
+    return jsonify({
+        "hwid_set": bool(stored_hwid),
+        "matches": stored_hwid == hwid if stored_hwid else False,
+        "hwid": stored_hwid
     })
 
 
