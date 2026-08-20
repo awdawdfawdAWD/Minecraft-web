@@ -113,6 +113,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .nav-links a:hover,.nav-links button:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
 .nav-dl-btn{background:var(--accent)!important;color:#fff!important;font-weight:600!important}
 .nav-dl-btn:hover{background:#9333ea!important}
+.nav-dropdown{position:relative}
+.nav-dropdown-btn{font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--muted);padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px}
+.nav-dropdown-btn:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
+.nav-dropdown-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:rgba(22,22,28,0.95);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:6px;min-width:150px;backdrop-filter:blur(20px);box-shadow:0 12px 40px rgba(0,0,0,0.5);z-index:200}
+.nav-dropdown.open .nav-dropdown-menu{display:block}
+.nav-dropdown-menu a{display:block;font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--muted);text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s}
+.nav-dropdown-menu a:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
 section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
 .hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;position:relative;padding-top:80px}
 .hero-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:24px;opacity:0;animation:fadeUp 0.8s 0.2s forwards}
@@ -201,7 +208,13 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <a href="#features">Features</a>
     <a href="#changelog">Changelog</a>
     <a href="#install">Install</a>
-    <a href="/login">Login</a>
+    <div class="nav-dropdown">
+      <button class="nav-dropdown-btn" onclick="this.parentElement.classList.toggle('open')">Login <span style="font-size:0.6rem">&#9662;</span></button>
+      <div class="nav-dropdown-menu">
+        <a href="/login">Player Login</a>
+        <a href="/login">Staff Login</a>
+      </div>
+    </div>
     <a class="nav-dl-btn" href="%%CLIENT_URL%%">Download</a>
   </div>
 </div>
@@ -422,6 +435,12 @@ var dlObs = new IntersectionObserver(function(entries) {
   if (entries[0].isIntersecting) { animateCount(dlEl, dlTarget); dlObs.disconnect(); }
 }, { threshold: 0.5 });
 dlObs.observe(dlEl);
+
+document.addEventListener('click', function(e) {
+  document.querySelectorAll('.nav-dropdown.open').forEach(function(d) {
+    if (!d.contains(e.target)) d.classList.remove('open');
+  });
+});
 </script>
 </body>
 </html>"""
