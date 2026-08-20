@@ -206,10 +206,22 @@ _version_cache = None
 _version_cache_time = 0
 
 
+_screenshots_cache = None
+_SCREENSHOT_FILES = [
+    "Screenshot_20260821_005044.png",
+    "Screenshot_20260821_005108.png",
+]
+
 def fetch_screenshots_from_github():
+    global _screenshots_cache
+    if _screenshots_cache is not None:
+        return _screenshots_cache
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_SCREENSHOTS_FOLDER}"
-        req = urllib.request.Request(url, headers={"User-Agent": "unkk-client-site"})
+        headers = {"User-Agent": "unkk-client-site"}
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
+        req = urllib.request.Request(url, headers=headers)
         resp = urllib.request.urlopen(req, timeout=10)
         data = json.loads(resp.read())
         images = []
@@ -217,10 +229,14 @@ def fetch_screenshots_from_github():
             name = item.get("name", "")
             if any(name.lower().endswith(ext) for ext in IMAGE_EXTS):
                 images.append({"name": name, "url": f"{GITHUB_RAW_BASE}/{name}"})
-        return images
+        if images:
+            _screenshots_cache = images
+            return images
     except Exception as e:
         print(f"GitHub screenshot fetch error: {e}")
-        return []
+    fallback = [{"name": f, "url": f"{GITHUB_RAW_BASE}/{f}"} for f in _SCREENSHOT_FILES]
+    _screenshots_cache = fallback
+    return fallback
 
 
 def require_login(f):
