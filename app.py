@@ -1,39 +1,33 @@
 import os
 import json
 import time
+import threading
+import uuid
 import urllib.request
 from functools import wraps
-from flask import Flask, request, redirect, Response, session, url_for
+from flask import Flask, request, redirect, Response, session, url_for, jsonify
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(32).hex())
 
-OWNER_USERNAME = os.environ.get("OWNER_USER", "admin")
-OWNER_PASSWORD = os.environ.get("OWNER_PASS", "unkk2026")
+OWNER_USERNAME = os.environ.get("OWNER_USER", "owner")
+OWNER_PASSWORD = os.environ.get("OWNER_PASS", "changeme")
 
 CLIENT_URL = os.environ.get("CLIENT_URL", "https://github.com/awdawdfawdAWD/MC-CLIENT/releases/download/CLient/unkk-62.0.0.20260820.085414.jar")
 FABRIC_API_URL = os.environ.get("FABRIC_URL", "https://github.com/awdawdfawdAWD/MC-CLIENT/releases/download/CLient/fabric-api-0.156.0+26.2.jar")
 GITHUB_REPO = "awdawdfawdAWD/Minecraft-web"
 GITHUB_SCREENSHOTS_FOLDER = "screenshots"
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/" + GITHUB_REPO + "/main/" + GITHUB_SCREENSHOTS_FOLDER
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_SCREENSHOTS_FOLDER}"
 
 DOWNLOAD_COUNT = 147
 APP_START_TIME = time.time()
+
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
-MC_VER = os.environ.get("MC_VERSION", "26.2")
-CLIENT_VER = os.environ.get("CLIENT_VERSION", "62.0.0")
-RELEASE_NAME = os.environ.get("RELEASE_NAME", "26.2 Minecraft Client")
-
-_screenshots_cache = None
-_screenshots_cache_time = 0
 
 def fetch_screenshots_from_github():
-    global _screenshots_cache, _screenshots_cache_time
-    if _screenshots_cache is not None and (time.time() - _screenshots_cache_time) < 300:
-        return _screenshots_cache
     try:
-        url = "https://api.github.com/repos/" + GITHUB_REPO + "/contents/" + GITHUB_SCREENSHOTS_FOLDER
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_SCREENSHOTS_FOLDER}"
         req = urllib.request.Request(url, headers={"User-Agent": "unkk-client-site"})
         resp = urllib.request.urlopen(req, timeout=10)
         data = json.loads(resp.read())
@@ -41,13 +35,12 @@ def fetch_screenshots_from_github():
         for item in data:
             name = item.get("name", "")
             if any(name.lower().endswith(ext) for ext in IMAGE_EXTS):
-                images.append({"name": name, "url": GITHUB_RAW_BASE + "/" + name})
-        _screenshots_cache = images
-        _screenshots_cache_time = time.time()
+                images.append({"name": name, "url": f"{GITHUB_RAW_BASE}/{name}"})
         return images
     except Exception as e:
-        print("GitHub screenshot fetch error: " + str(e))
-        return _screenshots_cache if _screenshots_cache is not None else []
+        print(f"GitHub screenshot fetch error: {e}")
+        return []
+
 
 def require_login(f):
     @wraps(f)
@@ -57,378 +50,813 @@ def require_login(f):
         return f(*args, **kwargs)
     return decorated
 
-CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--p:#7c3aed;--pl:#a78bfa;--pd:#5b21b6;--b:#3b82f6;--g1:#06060c;--g2:#0c0c18;--card:rgba(12,12,24,.55);--brd:rgba(255,255,255,.04);--t:#e2e8f0;--td:#7c8aa0;--tm:#3b4560}
+
+SITE_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk client</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--ink:#0c0c10;--paper:#f0ede8;--muted:#8a877e;--accent:#a855f7;--accent2:#6366f1;--green:#22c55e;--card:#16161c;--card-border:#2a2a35;--font:'Space Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',monospace}
 html{scroll-behavior:smooth}
-body{background:var(--g1);color:var(--t);font-family:'Inter',system-ui,sans-serif;overflow-x:hidden;line-height:1.6}
-::selection{background:rgba(124,58,237,.35);color:#fff}
-::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:var(--g1)}
-::-webkit-scrollbar-thumb{background:rgba(124,58,237,.25);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:rgba(124,58,237,.45)}
-a{color:var(--pl);text-decoration:none;transition:all .25s}
-a:hover{color:#c4b5fd}
-code{background:rgba(124,58,237,.12);padding:2px 8px;border-radius:6px;font-size:.88em;color:var(--pl);border:1px solid rgba(124,58,237,.15)}
+body{font-family:var(--font);background:var(--ink);color:var(--paper);overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:0.5}
+.topnav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:18px 40px;background:rgba(12,12,16,0.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.04);transition:transform 0.3s}
+.topnav.hide{transform:translateY(-100%)}
+.nav-logo{font-weight:700;font-size:1.1rem;letter-spacing:-0.5px}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;gap:8px;align-items:center}
+.nav-links a,.nav-links button{font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--muted);text-decoration:none;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;transition:all 0.2s}
+.nav-links a:hover,.nav-links button:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
+.nav-dl-btn{background:var(--accent)!important;color:#fff!important;font-weight:600!important}
+.nav-dl-btn:hover{background:#9333ea!important}
+section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;position:relative;padding-top:80px}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:24px;opacity:0;animation:fadeUp 0.8s 0.2s forwards}
+.hero-tag::before{content:'';width:24px;height:1px;background:var(--accent)}
+.hero h1{font-size:clamp(3.5rem,9vw,7rem);font-weight:700;letter-spacing:-3px;line-height:0.95;margin-bottom:28px;opacity:0;animation:fadeUp 0.8s 0.4s forwards}
+.hero h1 em{font-style:normal;color:var(--accent);position:relative}
+.hero-desc{font-size:1.05rem;color:var(--muted);line-height:1.7;max-width:460px;margin-bottom:40px;opacity:0;animation:fadeUp 0.8s 0.6s forwards}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;opacity:0;animation:fadeUp 0.8s 0.8s forwards}
+.btn-main{display:inline-flex;align-items:center;gap:10px;padding:14px 28px;border-radius:10px;font-family:var(--font);font-size:0.9rem;font-weight:600;text-decoration:none;border:none;cursor:pointer;transition:all 0.25s;background:var(--accent);color:#fff}
+.btn-main:hover{background:#9333ea;transform:translateY(-2px);box-shadow:0 8px 30px rgba(168,85,247,0.3)}
+.btn-main svg{width:18px;height:18px}
+.btn-outline{background:none;border:1px solid var(--card-border);color:var(--paper)}
+.btn-outline:hover{border-color:var(--muted);background:rgba(255,255,255,0.03)}
+.hero-stats{display:flex;gap:40px;margin-top:60px;opacity:0;animation:fadeUp 0.8s 1s forwards}
+.stat-block .num{font-size:1.8rem;font-weight:700;font-family:var(--mono);color:var(--paper)}
+.stat-block .label{font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-top:4px}
+.marquee-wrap{overflow:hidden;padding:30px 0;border-top:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.04)}
+.marquee{display:flex;gap:60px;animation:scroll 20s linear infinite;white-space:nowrap;width:max-content}
+.marquee span{font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.08)}
+@keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tab-bar{display:flex;gap:4px;margin-bottom:40px;background:var(--card);border-radius:12px;padding:5px;width:fit-content}
+.tab-btn{font-family:var(--font);font-size:0.82rem;font-weight:500;padding:10px 22px;border:none;border-radius:8px;background:none;color:var(--muted);cursor:pointer;transition:all 0.25s}
+.tab-btn.active{background:var(--accent);color:#fff}
+.tab-btn:hover:not(.active){color:var(--paper);background:rgba(255,255,255,0.04)}
+.tab-content{display:none;animation:fadeUp 0.5s forwards}
+.tab-content.active{display:block}
+.showcase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.showcase-item{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:16/10;background:var(--card);border:1px solid var(--card-border);cursor:pointer;transition:all 0.4s cubic-bezier(0.16,1,0.3,1)}
+.showcase-item:hover{transform:scale(1.02);border-color:var(--accent);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+.showcase-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s}
+.showcase-item:hover img{transform:scale(1.05)}
+.showcase-item .overlay{position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,0.7) 0%,transparent 50%);display:flex;align-items:flex-end;padding:20px;opacity:0;transition:opacity 0.3s}
+.showcase-item:hover .overlay{opacity:1}
+.showcase-item .overlay span{font-size:0.85rem;font-weight:600}
+.showcase-empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);font-size:0.9rem}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature-card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:28px;transition:all 0.3s;position:relative;overflow:hidden}
+.feature-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity 0.3s}
+.feature-card:hover::before{opacity:1}
+.feature-card:hover{border-color:rgba(168,85,247,0.2);transform:translateY(-3px)}
+.feature-card .f-icon{font-size:1.5rem;margin-bottom:16px}
+.feature-card h4{font-size:0.95rem;font-weight:600;margin-bottom:8px}
+.feature-card p{font-size:0.82rem;color:var(--muted);line-height:1.6}
+.cl-item{display:flex;gap:24px;padding:24px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.cl-item:last-child{border-bottom:none}
+.cl-version{font-family:var(--mono);font-size:0.8rem;color:var(--accent);min-width:80px;padding-top:2px}
+.cl-body h4{font-size:0.95rem;font-weight:600;margin-bottom:6px}
+.cl-body p{font-size:0.82rem;color:var(--muted);line-height:1.6}
+.cl-body .cl-date{font-size:0.7rem;color:rgba(255,255,255,0.2);margin-top:8px;font-family:var(--mono)}
+.cl-tag{display:inline-block;padding:3px 10px;border-radius:6px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-right:6px}
+.cl-tag.new{background:rgba(34,197,94,0.1);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+.cl-tag.fix{background:rgba(250,204,21,0.1);color:#facc15;border:1px solid rgba(250,204,21,0.2)}
+.install-flow{display:flex;gap:16px;flex-wrap:wrap}
+.install-step{flex:1;min-width:180px;background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:24px}
+.install-step .step-n{font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:1px;margin-bottom:12px}
+.install-step h4{font-size:0.9rem;font-weight:600;margin-bottom:6px}
+.install-step p{font-size:0.78rem;color:var(--muted);line-height:1.5}
+.install-step code{font-family:var(--mono);font-size:0.75rem;background:rgba(168,85,247,0.1);color:var(--accent);padding:3px 8px;border-radius:5px}
+.site-footer{padding:60px 40px;border-top:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px}
+.footer-left{font-size:0.78rem;color:var(--muted)}
+.footer-links{display:flex;gap:20px}
+.footer-links a{font-size:0.78rem;color:var(--muted);text-decoration:none;transition:color 0.2s}
+.footer-links a:hover{color:var(--paper)}
+.reveal{opacity:0;transform:translateY(30px);transition:all 0.7s cubic-bezier(0.16,1,0.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:10000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(10px);cursor:pointer}
+.lightbox.open{display:flex}
+.lightbox img{max-width:90%;max-height:85vh;border-radius:12px;box-shadow:0 20px 80px rgba(0,0,0,0.5)}
+.lightbox-close{position:absolute;top:24px;right:24px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s}
+.lightbox-close:hover{background:rgba(255,255,255,0.2)}
+.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.lightbox-nav:hover{background:rgba(255,255,255,0.15)}
+.lightbox-prev{left:24px}
+.lightbox-next{right:24px}
+.lightbox-counter{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:0.75rem;color:rgba(255,255,255,0.5)}
+.trail{position:fixed;width:8px;height:8px;border-radius:50%;background:var(--accent);pointer-events:none;z-index:9998;opacity:0;mix-blend-mode:screen}
+@media(max-width:768px){section{padding:100px 20px 60px}.topnav{padding:14px 20px}.nav-links a:not(.nav-dl-btn){display:none}.feature-grid{grid-template-columns:1fr}.install-flow{flex-direction:column}.hero-stats{gap:24px}.tab-bar{overflow-x:auto;width:100%}.site-footer{flex-direction:column;text-align:center}}
+</style>
+</head>
+<body>
+<div class="topnav" id="topnav">
+  <div class="nav-logo">unk<span>k</span></div>
+  <div class="nav-links">
+    <a href="#showcase">Showcase</a>
+    <a href="#features">Features</a>
+    <a href="#changelog">Changelog</a>
+    <a href="#install">Install</a>
+    <a class="nav-dl-btn" href="%%CLIENT_URL%%">Download</a>
+  </div>
+</div>
+<section class="hero">
+  <div class="hero-tag">v62.0.0 stable release</div>
+  <h1>unkk<br><em>client</em></h1>
+  <p class="hero-desc">A fabric-based minecraft client made for people who actually care about how the game looks and feels. built different.</p>
+  <div class="hero-actions">
+    <a href="%%CLIENT_URL%%" class="btn-main">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download Client
+    </a>
+    <a href="%%FABRIC_URL%%" class="btn-main btn-outline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Fabric API
+    </a>
+  </div>
+  <div class="hero-stats">
+    <div class="stat-block"><div class="num" id="dl-count">%%DOWNLOAD_COUNT%%</div><div class="label">Downloads</div></div>
+    <div class="stat-block"><div class="num">62.0.0</div><div class="label">Latest Version</div></div>
+    <div class="stat-block"><div class="num">1.21+</div><div class="label">Fabric</div></div>
+  </div>
+</section>
+<div class="marquee-wrap"><div class="marquee"><span>unkk client</span><span>fabric</span><span>customizable</span><span>open source</span><span>smooth</span><span>modern</span><span>clean</span><span>unkk client</span><span>fabric</span><span>customizable</span><span>open source</span><span>smooth</span><span>modern</span><span>clean</span></div></div>
+<section id="showcase">
+  <div class="reveal">
+    <div style="font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px">// screenshots</div>
+    <h2 style="font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px">See it in action</h2>
+  </div>
+  <div class="showcase-grid reveal" id="showcase-grid"></div>
+</section>
+<section id="features">
+  <div class="reveal">
+    <div style="font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px">// what you get</div>
+    <h2 style="font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px">Features</h2>
+  </div>
+  <div class="tab-bar reveal">
+    <button class="tab-btn active" onclick="switchTab(this,'tab-general')">General</button>
+    <button class="tab-btn" onclick="switchTab(this,'tab-perf')">Under the Hood</button>
+    <button class="tab-btn" onclick="switchTab(this,'tab-visual')">Visuals</button>
+  </div>
+  <div class="tab-content active" id="tab-general">
+    <div class="feature-grid">
+      <div class="feature-card reveal"><div class="f-icon">&#128295;</div><h4>Mod Support</h4><p>Full fabric mod API support. Works with your favorite mods out of the box.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127912;</div><h4>Custom HUD</h4><p>Redesigned HUD elements. Clean, minimal, and actually readable.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#9881;</div><h4>Deep Settings</h4><p>Every setting where you expect it. No digging through menus.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128274;</div><h4>Legit Client</h4><p>No shady modules. Just a better Minecraft experience.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128640;</div><h4>Quick Launch</h4><p>Less waiting around. Get into your world faster.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127760;</div><h4>Multiplayer</h4><p>Works on any server. Hypixel, private, or your own.</p></div>
+    </div>
+  </div>
+  <div class="tab-content" id="tab-perf">
+    <div class="feature-grid">
+      <div class="feature-card reveal"><div class="f-icon">&#128187;</div><h4>Memory Management</h4><p>Better garbage collection handling to reduce stuttering spikes.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127777;</div><h4>Entity Culling</h4><p>Skips rendering entities outside your view. Built-in, not a mod.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#9881;</div><h4>Thread Optimization</h4><p>Spreads workload across available CPU threads more evenly.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128230;</div><h4>Small Footprint</h4><p>Tiny jar size. No bundled junk you didn't ask for.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128200;</div><h4>Rendering Pipeline</h4><p>Modified rendering path. Still being worked on, but already better.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128296;</div><h4>Ongoing Work</h4><p>Performance is a priority. More optimizations coming every update.</p></div>
+    </div>
+  </div>
+  <div class="tab-content" id="tab-visual">
+    <div class="feature-grid">
+      <div class="feature-card reveal"><div class="f-icon">&#127912;</div><h4>Custom Shaders</h4><p>Built-in shader support for that cinematic look.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127744;</div><h4>Color Themes</h4><p>Multiple UI color themes. Pick your vibe.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128065;</div><h4>Block Overlay</h4><p>Customizable block selection overlay. Thinner, cleaner, better.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127752;</div><h4>Hotbar Design</h4><p>Redesigned hotbar with cleaner textures.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#128247;</div><h4>Screenshot Manager</h4><p>Built-in screenshot viewer with organization tools.</p></div>
+      <div class="feature-card reveal"><div class="f-icon">&#127916;</div><h4>Animations</h4><p>Smoother hand swing and item switch animations.</p></div>
+    </div>
+  </div>
+</section>
+<section id="changelog">
+  <div class="reveal">
+    <div style="font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px">// updates</div>
+    <h2 style="font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px">Changelog</h2>
+  </div>
+  <div class="reveal">
+    <div class="cl-item"><div class="cl-version">v62.0.0</div><div class="cl-body"><h4><span class="cl-tag new">new</span> Major Client Release</h4><p>Full rewrite of the rendering pipeline. New HUD system, entity culling, and custom shader support added.</p><div class="cl-date">aug 20 2026</div></div></div>
+    <div class="cl-item"><div class="cl-version">v61.3.2</div><div class="cl-body"><h4><span class="cl-tag fix">fix</span> Fabric Compatibility</h4><p>Fixed crash on startup with fabric-api 0.156.0. Resolved mod loader conflict with Sodium.</p><div class="cl-date">aug 12 2026</div></div></div>
+  </div>
+</section>
+<section id="install">
+  <div class="reveal">
+    <div style="font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px">// setup</div>
+    <h2 style="font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px">How to install</h2>
+  </div>
+  <div class="install-flow reveal">
+    <div class="install-step"><div class="step-n">01</div><h4>Install Fabric</h4><p>Get <a href="https://fabricmc.net/" style="color:var(--accent);text-decoration:none">Fabric Loader</a> for your Minecraft version.</p></div>
+    <div class="install-step"><div class="step-n">02</div><h4>Download</h4><p>Grab the client JAR and Fabric API from the buttons above.</p></div>
+    <div class="install-step"><div class="step-n">03</div><h4>Drop In</h4><p>Place both files in <code>.minecraft/mods</code></p></div>
+    <div class="install-step"><div class="step-n">04</div><h4>Launch</h4><p>Open Minecraft with the Fabric profile. You're in.</p></div>
+  </div>
+</section>
+<div class="marquee-wrap" style="margin-top:40px"><div class="marquee" style="animation-direction:reverse;animation-duration:25s"><span>download now</span><span>free</span><span>open source</span><span>no ads</span><span>just a good client</span><span>download now</span><span>free</span><span>open source</span><span>no ads</span><span>just a good client</span></div></div>
+<footer class="site-footer">
+  <div class="footer-left">unkk client &mdash; not affiliated with mojang or microsoft</div>
+  <div class="footer-links">
+    <a href="%%CLIENT_URL%%">Download</a>
+    <a href="https://github.com/awdawdfawdAWD/MC-CLIENT" target="_blank">GitHub</a>
+  </div>
+</footer>
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close">&times;</button>
+  <button class="lightbox-nav lightbox-prev" onclick="navLightbox(-1)">&#8249;</button>
+  <img id="lightbox-img" src="" alt="screenshot">
+  <button class="lightbox-nav lightbox-next" onclick="navLightbox(1)">&#8250;</button>
+  <div class="lightbox-counter" id="lightbox-counter"></div>
+</div>
+<script>
+var currentImages = %%IMAGES_JSON%%;
+var currentLightboxIndex = 0;
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-@keyframes float{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-14px) rotate(3deg)}}
-@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(124,58,237,.2)}50%{box-shadow:0 0 40px rgba(124,58,237,.4),0 0 80px rgba(124,58,237,.1)}}
-@keyframes pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.15);opacity:1}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+function buildShowcase() {
+  var grid = document.getElementById('showcase-grid');
+  if (!currentImages || currentImages.length === 0) {
+    grid.innerHTML = '<div class="showcase-empty">No screenshots yet. Upload images to the <code style="color:var(--accent)">screenshots/</code> folder in the GitHub repo.</div>';
+    return;
+  }
+  var html = '';
+  currentImages.forEach(function(img, i) {
+    html += '<div class="showcase-item" onclick="openLightboxAt(' + i + ')"><img src="' + img.url + '" alt="' + img.name + '" loading="lazy"><div class="overlay"><span>' + img.name + '</span></div></div>';
+  });
+  grid.innerHTML = html;
+  grid.querySelectorAll('.reveal').forEach(function(el) { observer.observe(el); });
+}
+buildShowcase();
 
-.bg-grid{position:fixed;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(124,58,237,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(124,58,237,.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
-.bg-glow{position:fixed;width:600px;height:600px;border-radius:50%;filter:blur(120px);pointer-events:none;z-index:0;opacity:.12}
-.bg-glow-1{top:-200px;left:-100px;background:var(--p)}
-.bg-glow-2{bottom:-200px;right:-100px;background:var(--b)}
-#particles{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+function switchTab(btn, tabId) {
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  var tab = document.getElementById(tabId);
+  tab.classList.add('active');
+  tab.querySelectorAll('.reveal').forEach(function(el, i) {
+    el.classList.remove('visible');
+    setTimeout(function() { el.classList.add('visible'); }, 80 * i);
+  });
+}
 
-.hero{position:relative;padding:160px 40px 100px;text-align:center;overflow:hidden;z-index:1}
-.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 30%,rgba(124,58,237,.06) 0%,transparent 70%);pointer-events:none}
-.hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 5%,rgba(124,58,237,.2) 50%,transparent 95%)}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.18);border-radius:100px;font-size:.78em;font-weight:600;color:var(--pl);letter-spacing:1px;text-transform:uppercase;margin-bottom:28px;animation:fadeUp .7s ease both}
-.hero-badge .live{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 2s ease infinite;box-shadow:0 0 8px rgba(34,197,94,.5)}
-.hero h1{font-size:clamp(2.5em,6vw,4.5em);font-weight:900;letter-spacing:-2px;line-height:1.05;margin-bottom:20px;animation:fadeUp .7s ease .1s both}
-.hero h1 .g{background:linear-gradient(135deg,#c4b5fd 0%,#7c3aed 35%,#3b82f6 70%,#06b6d4 100%);background-size:200% 200%;animation:shimmer 6s ease infinite;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero-sub{font-size:clamp(1em,2vw,1.2em);color:var(--td);max-width:560px;margin:0 auto 36px;animation:fadeUp .7s ease .2s both;line-height:1.7}
-.hero-version{display:inline-flex;align-items:center;gap:12px;padding:12px 28px;background:var(--card);border:1px solid var(--brd);border-radius:100px;backdrop-filter:blur(16px);animation:fadeUp .7s ease .3s both}
-.hero-version span{font-size:.88em;color:var(--td);font-weight:500}
-.hero-version .sep{width:1px;height:16px;background:rgba(255,255,255,.08)}
-.hero-version .hl{color:var(--pl);font-weight:700}
+var reveals = document.querySelectorAll('.reveal');
+var observer = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1 });
+reveals.forEach(function(el) { observer.observe(el); });
 
-.stats-bar{display:flex;justify-content:center;gap:0;padding:0;background:rgba(6,6,12,.7);border-top:1px solid var(--brd);border-bottom:1px solid var(--brd);backdrop-filter:blur(20px);position:relative;z-index:1;animation:fadeUp .7s ease .4s both}
-.stat-item{flex:1;text-align:center;padding:32px 20px;border-right:1px solid var(--brd);transition:background .3s}
-.stat-item:last-child{border-right:none}
-.stat-item:hover{background:rgba(124,58,237,.04)}
-.stat-num{font-size:2em;font-weight:800;background:linear-gradient(135deg,var(--pl),var(--b));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.stat-lbl{font-size:.72em;color:var(--tm);margin-top:6px;text-transform:uppercase;letter-spacing:2px;font-weight:700}
-
-nav{display:flex;justify-content:center;align-items:center;gap:4px;padding:12px 20px;background:rgba(6,6,12,.85);backdrop-filter:blur(24px) saturate(1.2);border-bottom:1px solid var(--brd);position:sticky;top:0;z-index:1000}
-nav a{padding:10px 20px;border-radius:10px;font-size:.85em;font-weight:500;color:var(--td);transition:all .25s;letter-spacing:.2px}
-nav a:hover{color:var(--t);background:rgba(124,58,237,.07)}
-nav a.active{color:var(--pl);background:rgba(124,58,237,.1)}
-nav .nav-sep{width:1px;height:20px;background:rgba(255,255,255,.06);margin:0 4px}
-
-.wrap{max-width:1160px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
-.sec{padding:100px 0}
-.sec-tag{display:inline-flex;align-items:center;gap:8px;font-size:.7em;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;color:var(--pl);margin-bottom:16px;padding:7px 18px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.12);border-radius:100px}
-.sec-title{font-size:clamp(1.8em,4vw,2.8em);font-weight:800;letter-spacing:-1px;margin-bottom:16px;line-height:1.15}
-.sec-title .g{background:linear-gradient(135deg,#e2e8f0 0%,var(--pl) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.sec-desc{color:var(--td);font-size:1.05em;max-width:600px;line-height:1.75;margin-bottom:44px}
-
-.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.fcard{background:var(--card);border:1px solid var(--brd);border-radius:16px;padding:32px 24px;transition:all .35s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;backdrop-filter:blur(12px)}
-.fcard::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(124,58,237,.3),transparent);opacity:0;transition:opacity .35s}
-.fcard::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(124,58,237,.05) 0%,transparent 65%);opacity:0;transition:opacity .35s;pointer-events:none}
-.fcard:hover{transform:translateY(-6px);border-color:rgba(124,58,237,.18);box-shadow:0 24px 80px rgba(0,0,0,.4)}
-.fcard:hover::before,.fcard:hover::after{opacity:1}
-.fcard .ico{font-size:2em;margin-bottom:18px;display:block;transition:transform .3s}
-.fcard:hover .ico{transform:scale(1.15) rotate(-5deg)}
-.fcard h3{font-size:1.05em;font-weight:700;margin-bottom:8px}
-.fcard p{color:var(--td);font-size:.88em;line-height:1.65}
-
-.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
-.scard{border-radius:14px;overflow:hidden;border:1px solid var(--brd);background:var(--card);transition:all .35s;backdrop-filter:blur(12px)}
-.scard:hover{transform:translateY(-6px);box-shadow:0 28px 80px rgba(0,0,0,.5);border-color:rgba(124,58,237,.2)}
-.scard img{width:100%;height:220px;object-fit:cover;display:block;transition:transform .4s}
-.scard:hover img{transform:scale(1.04)}
-.scard .cap{padding:14px 18px;color:var(--td);font-size:.82em;border-top:1px solid var(--brd)}
-
-.dl-section{text-align:center;padding:80px 40px;border-radius:24px;position:relative;overflow:hidden;background:linear-gradient(160deg,rgba(124,58,237,.04) 0%,var(--g1) 40%,rgba(59,130,246,.04) 100%);border:1px solid var(--brd)}
-.dl-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 5%,rgba(124,58,237,.35) 50%,transparent 95%)}
-.dl-section::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 5%,rgba(59,130,246,.2) 50%,transparent 95%)}
-.dl-btn{display:inline-flex;align-items:center;gap:10px;padding:18px 48px;background:linear-gradient(135deg,var(--p),var(--pd));color:#fff;font-size:1.05em;font-weight:700;border-radius:14px;border:none;cursor:pointer;transition:all .3s cubic-bezier(.4,0,.2,1);text-decoration:none;animation:glow 4s ease-in-out infinite;letter-spacing:.3px}
-.dl-btn:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 0 60px rgba(124,58,237,.4),0 20px 60px rgba(0,0,0,.3);color:#fff}
-.dl-btn:active{transform:translateY(0) scale(.97)}
-.dl-btns{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:24px}
-.dl-sub{padding:14px 32px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.15);color:var(--pl);font-weight:600;border-radius:12px;font-size:.92em;cursor:pointer;transition:all .3s;text-decoration:none}
-.dl-sub:hover{background:rgba(124,58,237,.12);transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.2);color:var(--pl)}
-.dl-info{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;margin-top:28px;color:var(--tm);font-size:.82em}
-.dl-info span{display:inline-flex;align-items:center;gap:6px}
-
-.faq-item{background:var(--card);border:1px solid var(--brd);border-radius:14px;padding:24px 28px;margin-bottom:10px;transition:all .3s;backdrop-filter:blur(12px)}
-.faq-item:hover{border-color:rgba(124,58,237,.12);transform:translateX(4px)}
-.faq-item h3{font-size:1em;font-weight:600;margin-bottom:8px}
-.faq-item p{color:var(--td);font-size:.88em;line-height:1.65}
-
-.footer{text-align:center;padding:48px 20px;color:var(--tm);font-size:.8em;border-top:1px solid var(--brd);position:relative;z-index:1}
-.footer a{color:var(--pl)}
-
-.auth-box{max-width:420px;margin:100px auto;padding:48px;background:var(--card);border:1px solid var(--brd);border-radius:20px;animation:fadeUp .6s ease both;backdrop-filter:blur(16px)}
-.auth-box h2{text-align:center;margin-bottom:32px;font-size:1.6em;font-weight:800}
-.auth-box label{display:block;margin-bottom:6px;color:var(--td);font-size:.82em;font-weight:500}
-.auth-box input{width:100%;padding:13px 16px;background:rgba(6,6,12,.5);border:1px solid var(--brd);border-radius:10px;color:var(--t);font-size:.95em;margin-bottom:18px;transition:all .25s;font-family:inherit}
-.auth-box input:focus{outline:none;border-color:var(--p);box-shadow:0 0 20px rgba(124,58,237,.08)}
-.auth-box .btn{width:100%;padding:13px;background:linear-gradient(135deg,var(--p),var(--pd));border:none;color:#fff;font-size:.95em;font-weight:600;border-radius:10px;cursor:pointer;transition:all .25s;font-family:inherit;letter-spacing:.3px}
-.auth-box .btn:hover{box-shadow:0 0 30px rgba(124,58,237,.3);transform:translateY(-2px)}
-.auth-err{color:#ef4444;text-align:center;margin-bottom:16px;font-size:.85em;padding:10px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.12);border-radius:10px}
-
-.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
-.dcard{background:var(--card);border:1px solid var(--brd);border-radius:16px;padding:28px;text-align:center;backdrop-filter:blur(12px);transition:all .3s}
-.dcard:hover{border-color:rgba(124,58,237,.12);transform:translateY(-4px)}
-.dcard h3{color:var(--tm);font-size:.72em;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;font-weight:700}
-.dcard .num{font-size:2.5em;font-weight:800;background:linear-gradient(135deg,var(--pl),var(--b));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.edit-sec{max-width:800px;margin:0 auto}
-.egroup{margin-bottom:28px}
-.egroup label{display:block;margin-bottom:6px;color:var(--td);font-weight:500;font-size:.85em}
-.egroup input,.egroup textarea{width:100%;padding:13px 16px;background:rgba(6,6,12,.5);border:1px solid var(--brd);border-radius:10px;color:var(--t);font-size:.95em;transition:all .25s;font-family:inherit}
-.egroup input:focus,.egroup textarea:focus{outline:none;border-color:var(--p);box-shadow:0 0 20px rgba(124,58,237,.08)}
-.egroup textarea{min-height:100px;resize:vertical}
-.llist{list-style:none}
-.llist li{display:flex;align-items:center;gap:12px;padding:13px 16px;background:rgba(6,6,12,.35);border-radius:10px;margin-bottom:6px;border:1px solid var(--brd)}
-.llist li span{flex:1;color:var(--td);font-size:.85em;word-break:break-all}
-.llist a{color:#ef4444;font-size:.82em;font-weight:600}
-.nlink{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.15);border-radius:10px;color:var(--pl);text-decoration:none;transition:all .25s;font-weight:500;font-size:.88em}
-.nlink:hover{background:rgba(124,58,237,.14);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2);color:var(--pl)}
-
-.reveal{opacity:0;transform:translateY(30px);transition:opacity .65s cubic-bezier(.4,0,.2,1),transform .65s cubic-bezier(.4,0,.2,1)}
-.reveal.vis{opacity:1;transform:translateY(0)}
-.rd1{transition-delay:.08s}.rd2{transition-delay:.16s}.rd3{transition-delay:.24s}
-
-@media(max-width:768px){.hero{padding:100px 20px 60px}.stats-bar{flex-wrap:wrap}.stat-item{border-right:none;border-bottom:1px solid var(--brd);min-width:50%}.stat-item:last-child{border-bottom:none}.fgrid{grid-template-columns:1fr}.sgrid{grid-template-columns:1fr}.sec{padding:60px 0}nav{flex-wrap:wrap;gap:2px;padding:8px}.nav-sep{display:none}}
-@media(max-width:1024px){.fgrid{grid-template-columns:repeat(2,1fr)}}
-"""
-
-JS = """
-(function(){
-var c=document.getElementById('particles');if(!c)return;
-var x=c.getContext('2d'),w,h,pts=[];
-function rs(){w=c.width=innerWidth;h=c.height=innerHeight}rs();
-addEventListener('resize',rs);
-function P(){this.x=Math.random()*w;this.y=Math.random()*h;this.vx=(Math.random()-.5)*.25;this.vy=(Math.random()-.5)*.25;this.r=Math.random()*1.5+.4;this.a=Math.random()*.35+.08}
-for(var i=0;i<50;i++)pts.push(new P());
-function dr(){x.clearRect(0,0,w,h);
-pts.forEach(function(p){p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=w;if(p.x>w)p.x=0;if(p.y<0)p.y=h;if(p.y>h)p.y=0;
-x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle='rgba(124,58,237,'+p.a+')';x.fill()});
-for(var i=0;i<pts.length;i++)for(var j=i+1;j<pts.length;j++){
-var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
-if(d<140){x.beginPath();x.moveTo(pts[i].x,pts[i].y);x.lineTo(pts[j].x,pts[j].y);
-x.strokeStyle='rgba(124,58,237,'+(.06*(1-d/140))+')';x.lineWidth=.4;x.stroke()}}
-requestAnimationFrame(dr)}dr()})();
-
-document.addEventListener('DOMContentLoaded',function(){
-var nl=document.querySelectorAll('nav a[href^="#"]');
-function act(){var s=scrollY+140;nl.forEach(function(l){var e=document.getElementById(l.getAttribute('href').slice(1));
-if(e){e.offsetTop<=s&&e.offsetTop+e.offsetHeight>s?l.classList.add('active'):l.classList.remove('active')}})}
-addEventListener('scroll',act);act();
-
-var rv=document.querySelectorAll('.reveal');
-if('IntersectionObserver' in window){
-var ob=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('vis');ob.unobserve(e.target)}})},{threshold:.08,rootMargin:'0px 0px -30px 0px'});
-rv.forEach(function(el){ob.observe(el)})}
-else{rv.forEach(function(el){el.classList.add('vis')})}
-
-document.querySelectorAll('.fcard').forEach(function(c){
-c.addEventListener('mousemove',function(e){var r=c.getBoundingClientRect();
-c.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
-c.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%')})});
+var lastScroll = 0;
+var nav = document.getElementById('topnav');
+window.addEventListener('scroll', function() {
+  var cur = window.scrollY;
+  if (cur > lastScroll && cur > 200) nav.classList.add('hide');
+  else nav.classList.remove('hide');
+  lastScroll = cur;
 });
-"""
 
-DESC_PH = "PLACEHOLDER_DESC"
-TITLE_PH = "PLACEHOLDER_TITLE"
+function openLightboxAt(index) {
+  event.stopPropagation();
+  currentLightboxIndex = index;
+  updateLightbox();
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+function navLightbox(dir) {
+  event.stopPropagation();
+  currentLightboxIndex += dir;
+  if (currentLightboxIndex < 0) currentLightboxIndex = currentImages.length - 1;
+  if (currentLightboxIndex >= currentImages.length) currentLightboxIndex = 0;
+  updateLightbox();
+}
+function updateLightbox() {
+  document.getElementById('lightbox-img').src = currentImages[currentLightboxIndex].url;
+  document.getElementById('lightbox-counter').textContent = (currentLightboxIndex + 1) + ' / ' + currentImages.length;
+}
 
-SITE_HTML = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n'
-SITE_HTML += '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-SITE_HTML += '<meta name="description" content="' + DESC_PH + '">\n'
-SITE_HTML += '<title>' + TITLE_PH + '</title>\n'
-SITE_HTML += '<style>' + CSS + '</style>\n</head>\n<body>\n'
-SITE_HTML += '<div class="bg-grid"></div><div class="bg-glow bg-glow-1"></div><div class="bg-glow bg-glow-2"></div>\n'
-SITE_HTML += '<canvas id="particles"></canvas>\n'
+var trails = [];
+for (var i = 0; i < 5; i++) {
+  var t = document.createElement('div');
+  t.className = 'trail';
+  t.style.width = (8 - i) + 'px';
+  t.style.height = (8 - i) + 'px';
+  document.body.appendChild(t);
+  trails.push({el: t, x: 0, y: 0});
+}
+var mouse = {x: 0, y: 0};
+document.addEventListener('mousemove', function(e) { mouse.x = e.clientX; mouse.y = e.clientY; });
+function animTrail() {
+  trails.forEach(function(t, i) {
+    var prev = i === 0 ? mouse : trails[i-1];
+    t.x += (prev.x - t.x) * 0.35;
+    t.y += (prev.y - t.y) * 0.35;
+    t.el.style.left = t.x - 4 + 'px';
+    t.el.style.top = t.y - 4 + 'px';
+    t.el.style.opacity = (1 - i * 0.2);
+  });
+  requestAnimationFrame(animTrail);
+}
+animTrail();
 
-SITE_HTML += '<section class="hero">\n'
-SITE_HTML += '<div class="hero-badge"><span class="live"></span> ACTIVE BUILD</div>\n'
-SITE_HTML += '<h1><span class="g">unkk client</span></h1>\n'
-SITE_HTML += '<p class="hero-sub">A Fabric-based Minecraft client with bundled mods, built for ' + MC_VER + '. Download, install, and play.</p>\n'
-SITE_HTML += '<div class="hero-version"><span class="hl">' + CLIENT_VER + '</span><span class="sep"></span><span>Minecraft ' + MC_VER + '</span><span class="sep"></span><span>Fabric</span></div>\n'
-SITE_HTML += '</section>\n'
+var dlEl = document.getElementById('dl-count');
+var dlTarget = %%DOWNLOAD_COUNT%%;
+function animateCount(el, target) {
+  var current = 0;
+  var step = Math.max(1, Math.ceil(target / 60));
+  var timer = setInterval(function() {
+    current += step;
+    if (current >= target) { current = target; clearInterval(timer); }
+    el.innerText = current;
+  }, 16);
+}
+var dlObs = new IntersectionObserver(function(entries) {
+  if (entries[0].isIntersecting) { animateCount(dlEl, dlTarget); dlObs.disconnect(); }
+}, { threshold: 0.5 });
+dlObs.observe(dlEl);
+</script>
+</body>
+</html>"""
 
-SITE_HTML += '<div class="stats-bar">\n'
-SITE_HTML += '<div class="stat-item"><div class="stat-num">' + str(DOWNLOAD_COUNT) + '</div><div class="stat-lbl">Downloads</div></div>\n'
-SITE_HTML += '<div class="stat-item"><div class="stat-num">' + MC_VER + '</div><div class="stat-lbl">Minecraft</div></div>\n'
-SITE_HTML += '<div class="stat-item"><div class="stat-num">' + CLIENT_VER + '</div><div class="stat-lbl">Client</div></div>\n'
-SITE_HTML += '<div class="stat-item"><div class="stat-num">Fabric</div><div class="stat-lbl">Mod Loader</div></div>\n'
-SITE_HTML += '</div>\n'
 
-SITE_HTML += '<nav>\n'
-SITE_HTML += '<a href="#features">Features</a>\n'
-SITE_HTML += '<a href="#screenshots">Screenshots</a>\n'
-SITE_HTML += '<a href="#download">Download</a>\n'
-SITE_HTML += '<a href="#faq">FAQ</a>\n'
-SITE_HTML += '<div class="nav-sep"></div>\n'
-SITE_HTML += '<a href="/login">Dashboard</a>\n'
-SITE_HTML += '</nav>\n'
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - login</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.bg{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(168,85,247,0.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,0.06) 0%,transparent 60%);z-index:0}
+.card{position:relative;z-index:1;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;width:360px;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+h2{font-size:1.3rem;font-weight:700;margin-bottom:6px;text-align:center}
+.sub{font-size:0.8rem;color:#8a877e;text-align:center;margin-bottom:30px}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
+label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+input{width:100%;padding:12px 14px;background:rgba(12,12,16,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+input:focus{border-color:#a855f7}
+button{width:100%;padding:12px;background:#a855f7;color:#fff;border:none;border-radius:8px;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px rgba(168,85,247,0.3)}
+.back{display:block;text-align:center;margin-top:16px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.back:hover{color:#f0ede8}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <h2>owner access</h2>
+  <div class="sub">authenticate to continue</div>
+  ERROR_PLACEHOLDER
+  <form method="POST">
+    <label>username</label>
+    <input type="text" name="username" placeholder="username" required autofocus>
+    <label>password</label>
+    <input type="password" name="password" placeholder="password" required>
+    <button type="submit">sign in</button>
+  </form>
+  <a href="/" class="back">&larr; back to site</a>
+</div>
+</body>
+</html>"""
 
-SITE_HTML += '<div class="wrap">\n'
 
-SITE_HTML += '<section id="features" class="sec">\n'
-SITE_HTML += '<div class="reveal"><div class="sec-tag">About</div>\n'
-SITE_HTML += '<h2 class="sec-title"><span class="g">What is unkk client?</span></h2>\n'
-SITE_HTML += '<p class="sec-desc">A Fabric-based client that bundles essential client-side mods into a single download for Minecraft ' + MC_VER + '.</p></div>\n'
-SITE_HTML += '<div class="fgrid">\n'
-features = [
-    ("&#x1F3AE;", "Bundled Mods", "Client-side mods come pre-installed. No hunting for individual mods or version compatibility issues."),
-    ("&#x2699;&#xFE0F;", "Configurable", "Adjust settings and mod configs to match your playstyle. Tweak performance, visuals, and features."),
-    ("&#x1F680;", "Fabric Powered", "Built on Fabric for fast load times, broad mod compatibility, and an active community."),
-    ("&#x1F512;", "Vanilla Servers", "Join vanilla and multiplayer servers without issues. Client-side only, no server changes needed."),
-    ("&#x1F4E6;", "All-in-One", "Everything you need in one jar. Drop it into your mods folder with Fabric API and you're set."),
-    ("&#x1F310;", "Multiplayer", "Full multiplayer support. Connect to any server running Minecraft " + MC_VER + " with Fabric."),
-]
-for i, (ico, title, desc) in enumerate(features):
-    cls = "reveal"
-    if i % 3 == 1: cls += " rd1"
-    elif i % 3 == 2: cls += " rd2"
-    SITE_HTML += '<div class="fcard ' + cls + '"><span class="ico">' + ico + '</span><h3>' + title + '</h3><p>' + desc + '</p></div>\n'
-SITE_HTML += '</div></section>\n'
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh}
+.dash-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);border-bottom:1px solid rgba(255,255,255,0.04);backdrop-filter:blur(20px)}
+.dash-nav .logo{font-weight:700;font-size:1rem}.dash-nav .logo span{color:#a855f7}
+.dash-nav .right{display:flex;gap:12px;align-items:center}
+.dash-nav a,.dash-nav button{font-size:0.8rem;color:#8a877e;text-decoration:none;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;font-family:inherit;transition:all 0.2s}
+.dash-nav a:hover,.dash-nav button:hover{color:#f0ede8;background:rgba(255,255,255,0.05)}
+.dash-nav .logout{color:#ef4444;border:1px solid rgba(239,68,68,0.2)}
+.dash-nav .logout:hover{background:rgba(239,68,68,0.1)}
+.container{max-width:1000px;margin:0 auto;padding:40px}
+.section-title{font-size:0.72rem;color:#a855f7;text-transform:uppercase;letter-spacing:2px;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+h1{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:40px}
+.stat-card{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:24px}
+.stat-card .val{font-size:2rem;font-weight:700;font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+.stat-card .lbl{font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px}
+.panel{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:30px;margin-bottom:20px}
+.panel h3{font-size:0.95rem;font-weight:600;margin-bottom:20px}
+.info-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.85rem;gap:20px;word-break:break-all}
+.info-row:last-child{border-bottom:none}
+.info-row .k{color:#8a877e;min-width:100px;flex-shrink:0}
+.info-row .v{color:#f0ede8;font-family:'JetBrains Mono',monospace;font-size:0.75rem}
+.code-block{background:#0a0a0e;border:1px solid rgba(255,255,255,0.04);border-radius:8px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:#a855f7;overflow-x:auto;white-space:pre;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="dash-nav">
+  <div class="logo">unk<span>k</span> dashboard</div>
+  <div class="right">
+    <a href="/">view site</a>
+    <a href="/dashboard/edit" style="color:#a855f7">edit links</a>
+    <button class="logout" onclick="location.href='/logout'">sign out</button>
+  </div>
+</div>
+<div class="container">
+  <div class="section-title">// overview</div>
+  <h1>Dashboard</h1>
+  <div class="stat-row">
+    <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Total Downloads</div></div>
+    <div class="stat-card"><div class="val">v62.0.0</div><div class="lbl">Current Version</div></div>
+    <div class="stat-card"><div class="val" id="uptime-val">--</div><div class="lbl">Uptime</div></div>
+  </div>
+  <div class="panel">
+    <h3>Download Links</h3>
+    <div class="info-row"><span class="k">Client JAR</span><span class="v">%%CLIENT_URL%%</span></div>
+    <div class="info-row"><span class="k">Fabric API</span><span class="v">%%FABRIC_URL%%</span></div>
+  </div>
+  <div class="panel">
+    <h3>Env Variables for Render</h3>
+    <div class="info-row"><span class="k">FLASK_SECRET_KEY</span><span class="v">any random string (use os.urandom(32).hex())</span></div>
+    <div class="info-row"><span class="k">OWNER_USER</span><span class="v">your login username</span></div>
+    <div class="info-row"><span class="k">OWNER_PASS</span><span class="v">your login password</span></div>
+  </div>
+  <div class="panel">
+    <h3>Screenshots</h3>
+    <p style="font-size:0.85rem;color:#8a877e;margin-bottom:16px">Upload images to the <code style="color:#a855f7;background:rgba(168,85,247,0.1);padding:2px 8px;border-radius:4px">screenshots/</code> folder in your GitHub repo. The site auto-loads all image files from there.</p>
+    <div class="code-block">Minecraft-web/
+  screenshots/
+    screenshot1.png
+    screenshot2.jpg
+    gameplay.gif
+    ...</div>
+    screenshot1.png
+    screenshot2.jpg
+    gameplay.gif
+    ...</div>
+  </div>
+</div>
+<script>
+var start = %%SERVER_START%%;
+function fmt(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=s%60,p=[];if(d)p.push(d+"d");if(h)p.push(h+"h");if(m)p.push(m+"m");p.push(sec+"s");return p.join(" ")}
+setInterval(function(){document.getElementById("uptime-val").innerText=fmt(Math.floor(Date.now()/1000-start))},1000);
+</script>
+</body>
+</html>"""
 
-SITE_HTML += '<section id="screenshots" class="sec">\n'
-SITE_HTML += '<div class="reveal"><div class="sec-tag">Gallery</div>\n'
-SITE_HTML += '<h2 class="sec-title"><span class="g">Screenshots</span></h2>\n'
-SITE_HTML += '<p class="sec-desc">See what unkk client looks like in action.</p></div>\n'
-SITE_HTML += '<div class="sgrid" id="sgrid"><p style="color:var(--tm)">Loading screenshots...</p></div>\n'
-SITE_HTML += '</section>\n'
 
-SITE_HTML += '<section id="download" class="sec">\n'
-SITE_HTML += '<div class="dl-section">\n'
-SITE_HTML += '<div class="sec-tag">Get Started</div>\n'
-SITE_HTML += '<h2 class="sec-title"><span class="g">Download unkk client</span></h2>\n'
-SITE_HTML += '<p class="sec-desc" style="max-width:480px;margin-left:auto;margin-right:auto">Install Fabric ' + MC_VER + ', drop both jars into your mods folder, and launch.</p>\n'
-SITE_HTML += '<div class="dl-btns">\n'
-SITE_HTML += '<a href="' + CLIENT_URL + '" class="dl-btn">&#x2B07; Download Client</a>\n'
-SITE_HTML += '<a href="' + FABRIC_API_URL + '" class="dl-sub">&#x2B07; Fabric API</a>\n'
-SITE_HTML += '</div>\n'
-SITE_HTML += '<div class="dl-info"><span>&#x1F4C1; Client ' + CLIENT_VER + '</span><span>&#x1F4C1; Fabric API 0.156.0</span><span>&#x1F4BB; Minecraft ' + MC_VER + '</span></div>\n'
-SITE_HTML += '</div></section>\n'
+EDIT_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - edit links</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh}
+.dash-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);border-bottom:1px solid rgba(255,255,255,0.04)}
+.dash-nav .logo{font-weight:700;font-size:1rem}.dash-nav .logo span{color:#a855f7}
+.dash-nav a{font-size:0.8rem;color:#8a877e;text-decoration:none;padding:8px 16px;border-radius:8px;transition:all 0.2s}
+.dash-nav a:hover{color:#f0ede8;background:rgba(255,255,255,0.05)}
+.container{max-width:700px;margin:0 auto;padding:40px}
+.section-title{font-size:0.72rem;color:#a855f7;text-transform:uppercase;letter-spacing:2px;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+h1{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
+.form-group{margin-bottom:24px}
+.form-group label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+.form-group input{width:100%;padding:12px 14px;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'JetBrains Mono',monospace;font-size:0.82rem;outline:none;transition:border-color 0.2s}
+.form-group input:focus{border-color:#a855f7}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:8px;font-family:inherit;font-size:0.85rem;font-weight:600;border:none;cursor:pointer;transition:all 0.2s;text-decoration:none}
+.btn-primary{background:#a855f7;color:#fff}
+.btn-primary:hover{background:#9333ea}
+.btn-secondary{background:rgba(255,255,255,0.05);color:#8a877e;border:1px solid rgba(255,255,255,0.06)}
+.btn-secondary:hover{color:#f0ede8;background:rgba(255,255,255,0.08)}
+.success{background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);color:#22c55e;padding:12px;border-radius:8px;font-size:0.85rem;margin-bottom:20px}
+</style>
+</head>
+<body>
+<div class="dash-nav">
+  <div class="logo">unk<span>k</span> dashboard</div>
+  <div style="display:flex;gap:12px"><a href="/dashboard">back</a></div>
+</div>
+<div class="container">
+  <div class="section-title">// settings</div>
+  <h1>Edit Download Links</h1>
+  %%SAVED_MSG%%
+  <form method="POST">
+    <div class="form-group">
+      <label>Client JAR URL</label>
+      <input type="text" name="client_url" value="%%CLIENT_URL%%" placeholder="https://github.com/...jar">
+    </div>
+    <div class="form-group">
+      <label>Fabric API URL</label>
+      <input type="text" name="fabric_url" value="%%FABRIC_URL%%" placeholder="https://github.com/...jar">
+    </div>
+    <div style="display:flex;gap:12px">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+</body>
+</html>"""
 
-SITE_HTML += '<section id="faq" class="sec">\n'
-SITE_HTML += '<div class="reveal"><div class="sec-tag">Help</div>\n'
-SITE_HTML += '<h2 class="sec-title"><span class="g">FAQ</span></h2></div>\n'
-faq = [
-    ("What Minecraft version is this?", "unkk client targets Minecraft <strong>" + MC_VER + "</strong> and requires the Fabric mod loader."),
-    ("How do I install it?", "Install Fabric for Minecraft " + MC_VER + " using the Fabric installer, then place both the unkk client jar and Fabric API jar into your <code>.minecraft/mods</code> folder."),
-    ("Do I need Fabric API?", "Yes. The Fabric API jar is required for most Fabric mods. Both jars are provided in the download section above."),
-    ("Will this work on multiplayer servers?", "Yes. unkk client is entirely client-side. Join any server running Minecraft " + MC_VER + " without issues."),
-    ("Is this official?", "No. unkk client is an independent fan project, not affiliated with Mojang or Microsoft."),
-]
-for i, (q, a) in enumerate(faq):
-    cls = "reveal"
-    if i % 2 == 1: cls += " rd1"
-    SITE_HTML += '<div class="faq-item ' + cls + '"><h3>' + q + '</h3><p>' + a + '</p></div>\n'
-SITE_HTML += '</section>\n'
-
-SITE_HTML += '</div>\n'
-SITE_HTML += '<footer class="footer"><p>unkk client &mdash; Independent fan project. Not affiliated with Mojang or Microsoft.</p>\n'
-SITE_HTML += '<p style="margin-top:6px">Fabric mod loader &middot; Minecraft ' + MC_VER + '</p></footer>\n'
-SITE_HTML += '<script>' + JS + '</script>\n'
-SITE_HTML += "<script>\n"
-SITE_HTML += "fetch('/api/screenshots').then(function(r){return r.json()}).then(function(imgs){\n"
-SITE_HTML += "var g=document.getElementById('sgrid');\n"
-SITE_HTML += "if(!imgs||!imgs.length){g.innerHTML='<p style=\"color:var(--tm)\">No screenshots yet. Add images to <code>screenshots/</code> in the GitHub repo.</p>';return}\n"
-SITE_HTML += "g.innerHTML='';imgs.forEach(function(img,i){\n"
-SITE_HTML += "var c=document.createElement('div');c.className='scard reveal vis';\n"
-SITE_HTML += "c.style.animationDelay=(i*.1)+'s';\n"
-SITE_HTML += "c.innerHTML='<img src=\"'+img.url+'\" alt=\"'+img.name+'\" loading=\"lazy\" onerror=\"this.parentElement.style.display=none\"><div class=\"cap\">'+img.name+'</div>';\n"
-SITE_HTML += "g.appendChild(c)})\n"
-SITE_HTML += ".catch(function(){document.getElementById('sgrid').innerHTML='<p style=\"color:var(--tm)\">Could not load screenshots.</p>'});\n"
-SITE_HTML += "</script>\n</body>\n</html>\n"
-
-def build_main_page():
-    return SITE_HTML.replace(DESC_PH, RELEASE_NAME + " - A Fabric-based Minecraft " + MC_VER + " client").replace(TITLE_PH, RELEASE_NAME + " | unkk client")
 
 @app.route("/")
-def home():
-    return build_main_page()
+def home_redirect():
+    screenshots = fetch_screenshots_from_github()
+    page = SITE_HTML_TEMPLATE
+    page = page.replace("%%CLIENT_URL%%", CLIENT_URL)
+    page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
+    page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
+    page = page.replace("%%IMAGES_JSON%%", json.dumps(screenshots))
+    return Response(page, content_type="text/html")
+
+
+@app.route("/api/download/client")
+def download_client():
+    global DOWNLOAD_COUNT
+    DOWNLOAD_COUNT += 1
+    return redirect(CLIENT_URL)
+
+
+@app.route("/api/download/fabric")
+def download_fabric():
+    return redirect(FABRIC_API_URL)
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    uptime_seconds = int(time.time() - APP_START_TIME)
+    return {
+        "status": "online",
+        "uptime": uptime_seconds,
+        "downloads": DOWNLOAD_COUNT,
+        "client": CLIENT_URL,
+        "fabric_api": FABRIC_API_URL
+    }
+
 
 @app.route("/api/screenshots")
 def api_screenshots():
-    return fetch_screenshots_from_github()
+    return jsonify(fetch_screenshots_from_github())
 
-def make_login_page(error_msg=""):
-    err_html = '<div class="auth-err">' + error_msg + '</div>' if error_msg else ""
-    return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login | unkk client</title><style>' + CSS + '</style></head><body>' \
-        + '<div class="bg-grid"></div><div class="bg-glow bg-glow-1"></div><div class="bg-glow bg-glow-2"></div><canvas id="particles"></canvas>' \
-        + '<div class="auth-box"><h2>Owner Login</h2>' + err_html \
-        + '<form method="POST"><label>Username</label><input name="username" required autocomplete="username">' \
-        + '<label>Password</label><input type="password" name="password" required autocomplete="current-password">' \
-        + '<button class="btn" type="submit">Sign In</button></form>' \
-        + '<p style="text-align:center;margin-top:18px"><a href="/" style="color:var(--tm);font-size:.82em">&larr; Back to site</a></p></div>' \
-        + '<script>' + JS + '</script></body></html>'
 
-@app.route("/login", methods=["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login_page():
+    if session.get("logged_in"):
+        return redirect(url_for("admin_dashboard"))
+    error_html = ""
     if request.method == "POST":
-        user = request.form.get("username","")
-        pw = request.form.get("password","")
-        if user == OWNER_USERNAME and pw == OWNER_PASSWORD:
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if username == OWNER_USERNAME and password == OWNER_PASSWORD:
             session["logged_in"] = True
-            session["username"] = user
-            return redirect(url_for("dashboard"))
-        return Response(make_login_page("Invalid username or password"), content_type="text/html")
-    return Response(make_login_page(), content_type="text/html")
+            session["user"] = username
+            return redirect(url_for("admin_dashboard"))
+        else:
+            error_html = '<div class="error">Invalid credentials.</div>'
+    return Response(LOGIN_HTML.replace("ERROR_PLACEHOLDER", error_html), content_type="text/html")
+
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("home"))
+    return redirect(url_for("login_page"))
+
 
 @app.route("/dashboard")
 @require_login
-def dashboard():
-    up = int(time.time() - APP_START_TIME)
-    uptime_str = str(up // 3600) + "h " + str((up % 3600) // 60) + "m" if up >= 3600 else str(up) + "s"
-    return Response('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard | unkk client</title><style>' + CSS + '</style></head><body>' \
-        + '<div class="bg-grid"></div><div class="bg-glow bg-glow-1"></div><div class="bg-glow bg-glow-2"></div><canvas id="particles"></canvas>' \
-        + '<nav><a href="/">Home</a><a href="/dashboard" class="active">Dashboard</a><a href="/edit-links">Edit Links</a><div class="nav-sep"></div><a href="/logout" style="color:#ef4444">Logout</a></nav>' \
-        + '<div class="wrap" style="padding-top:60px">' \
-        + '<div class="sec-tag">Admin</div><h1 class="sec-title" style="margin-bottom:40px"><span class="g">Welcome, ' + session.get("username","admin") + '</span></h1>' \
-        + '<div class="dgrid">' \
-        + '<div class="dcard"><h3>Downloads</h3><div class="num">' + str(DOWNLOAD_COUNT) + '</div></div>' \
-        + '<div class="dcard"><h3>Uptime</h3><div class="num">' + uptime_str + '</div></div>' \
-        + '<div class="dcard"><h3>Status</h3><div class="num" style="background:linear-gradient(135deg,#22c55e,#16a34a);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Online</div></div>' \
-        + '<div class="dcard"><h3>Minecraft</h3><div class="num">' + MC_VER + '</div></div>' \
-        + '</div>' \
-        + '<h2 class="sec-title" style="margin-top:56px;margin-bottom:24px"><span class="g">Quick Actions</span></h2>' \
-        + '<div style="display:flex;gap:10px;flex-wrap:wrap">' \
-        + '<a href="/edit-links" class="nlink">&#x270F;&#xFE0F; Edit Links</a>' \
-        + '<a href="/" class="nlink">&#x1F3E0; View Site</a>' \
-        + '</div>' \
-        + '<h2 class="sec-title" style="margin-top:56px;margin-bottom:24px"><span class="g">Server Info</span></h2>' \
-        + '<div class="fcard" style="max-width:500px">' \
-        + '<p style="color:var(--td);margin-bottom:8px"><strong style="color:var(--t)">Client:</strong> ' + CLIENT_VER + '</p>' \
-        + '<p style="color:var(--td);margin-bottom:8px"><strong style="color:var(--t)">Minecraft:</strong> ' + MC_VER + '</p>' \
-        + '<p style="color:var(--td);margin-bottom:8px"><strong style="color:var(--t)">Python:</strong> ' + os.environ.get("PYTHON_VERSION","3.14.3") + '</p>' \
-        + '<p style="color:var(--td);margin-bottom:8px"><strong style="color:var(--t)">Platform:</strong> ' + os.environ.get("DYNO","local") + '</p>' \
-        + '<p style="color:var(--td)"><strong style="color:var(--t)">Owner:</strong> ' + OWNER_USERNAME + '</p>' \
-        + '</div></div>' \
-        + '<script>' + JS + '</script></body></html>', content_type="text/html")
+def admin_dashboard():
+    page = DASHBOARD_HTML
+    page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
+    page = page.replace("%%CLIENT_URL%%", CLIENT_URL)
+    page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
+    page = page.replace("%%SERVER_START%%", str(int(APP_START_TIME)))
+    return Response(page, content_type="text/html")
 
-@app.route("/edit-links", methods=["GET","POST"])
+
+@app.route("/dashboard/edit", methods=["GET", "POST"])
 @require_login
 def edit_links():
+    global CLIENT_URL, FABRIC_API_URL
+    saved_msg = ""
     if request.method == "POST":
-        global CLIENT_URL, FABRIC_API_URL
-        nc = request.form.get("client_url","").strip()
-        nf = request.form.get("fabric_url","").strip()
-        if nc: CLIENT_URL = nc
-        if nf: FABRIC_API_URL = nf
-        return redirect(url_for("edit_links"))
-    return Response('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edit Links | unkk client</title><style>' + CSS + '</style></head><body>' \
-        + '<div class="bg-grid"></div><div class="bg-glow bg-glow-1"></div><div class="bg-glow bg-glow-2"></div><canvas id="particles"></canvas>' \
-        + '<nav><a href="/">Home</a><a href="/dashboard">Dashboard</a><a href="/edit-links" class="active">Edit Links</a><div class="nav-sep"></div><a href="/logout" style="color:#ef4444">Logout</a></nav>' \
-        + '<div class="wrap" style="padding-top:60px"><div class="sec-tag">Admin</div>' \
-        + '<h1 class="sec-title" style="margin-bottom:40px"><span class="g">Edit Download Links</span></h1>' \
-        + '<div class="edit-sec">' \
-        + '<div class="egroup"><label>Client JAR URL</label><input type="url" name="client_url" value="' + CLIENT_URL.replace('"','&quot;') + '" form="lf"></div>' \
-        + '<div class="egroup"><label>Fabric API JAR URL</label><input type="url" name="fabric_url" value="' + FABRIC_API_URL.replace('"','&quot;') + '" form="lf"></div>' \
-        + '<form id="lf" method="POST" style="margin-top:24px"><button type="submit" class="dl-btn" style="font-size:.95em;padding:14px 40px">&#x2714; Save Changes</button></form>' \
-        + '<h2 class="sec-title" style="margin-top:56px;margin-bottom:24px"><span class="g">Current Links</span></h2>' \
-        + '<ul class="llist">' \
-        + '<li><span><strong style="color:var(--t)">Client:</strong> ' + CLIENT_URL + '</span></li>' \
-        + '<li><span><strong style="color:var(--t)">Fabric API:</strong> ' + FABRIC_API_URL + '</span></li>' \
-        + '</ul></div></div>' \
-        + '<script>' + JS + '</script></body></html>', content_type="text/html")
+        new_client = request.form.get("client_url", "").strip()
+        new_fabric = request.form.get("fabric_url", "").strip()
+        if new_client:
+            CLIENT_URL = new_client
+        if new_fabric:
+            FABRIC_API_URL = new_fabric
+        saved_msg = '<div class="success">Links updated successfully.</div>'
+    page = EDIT_HTML
+    page = page.replace("%%CLIENT_URL%%", CLIENT_URL)
+    page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
+    page = page.replace("%%SAVED_MSG%%", saved_msg)
+    return Response(page, content_type="text/html")
+
+
+MC_TOKENS_FILE = "mc_tokens.json"
+
+def load_mc_tokens():
+    try:
+        if os.path.exists(MC_TOKENS_FILE):
+            with open(MC_TOKENS_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_mc_tokens(data):
+    try:
+        with open(MC_TOKENS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Error saving mc tokens: {e}")
+
+
+MC_LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - login</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.bg{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(168,85,247,0.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,0.06) 0%,transparent 60%);z-index:0}
+.card{position:relative;z-index:1;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;width:380px;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+h2{font-size:1.3rem;font-weight:700;margin-bottom:6px;text-align:center}
+.sub{font-size:0.8rem;color:#8a877e;text-align:center;margin-bottom:30px}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
+label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+input{width:100%;padding:12px 14px;background:rgba(12,12,16,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+input:focus{border-color:#a855f7}
+button{width:100%;padding:12px;background:#a855f7;color:#fff;border:none;border-radius:8px;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px rgba(168,85,247,0.3)}
+.back{display:block;text-align:center;margin-top:16px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.back:hover{color:#f0ede8}
+.mc-info{background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.15);border-radius:8px;padding:12px;margin-bottom:20px;text-align:center;font-size:0.82rem;color:#a855f7}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <h2>unkk login</h2>
+  <div class="sub">authenticate to play</div>
+  %%MC_INFO%%
+  %%ERROR_PLACEHOLDER%%
+  <form method="POST">
+    <input type="hidden" name="token" value="%%TOKEN%%">
+    <input type="hidden" name="mc_username" value="%%MC_USERNAME%%">
+    <label>username</label>
+    <input type="text" name="username" placeholder="username" required autofocus>
+    <label>password</label>
+    <input type="password" name="password" placeholder="password" required>
+    <button type="submit">sign in</button>
+  </form>
+  <a href="/" class="back">&larr; back to site</a>
+</div>
+</body>
+</html>"""
+
+MC_SUCCESS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - login success</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.bg{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(34,197,94,0.08) 0%,transparent 60%);z-index:0}
+.card{position:relative;z-index:1;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;width:380px;text-align:center;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+.check{font-size:3rem;margin-bottom:16px}
+h2{font-size:1.3rem;font-weight:700;margin-bottom:8px;color:#22c55e}
+.sub{font-size:0.85rem;color:#8a877e;line-height:1.6;margin-bottom:24px}
+.back{display:inline-block;padding:10px 24px;background:#22c55e;color:#fff;border:none;border-radius:8px;font-family:'Space Grotesk',sans-serif;font-size:0.85rem;font-weight:600;text-decoration:none;transition:all 0.2s}
+.back:hover{background:#16a34a}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <div class="check">&#10003;</div>
+  <h2>Login Successful!</h2>
+  <div class="sub">You can close this tab and return to Minecraft.<br>Your client is now authenticated.</div>
+  <a href="/" class="back">Back to Site</a>
+</div>
+</body>
+</html>"""
+
+
+@app.route("/api/mc-auth/start", methods=["POST"])
+def mc_auth_start():
+    data = request.get_json(silent=True)
+    if not data or not data.get("mc_username"):
+        return jsonify({"error": "mc_username required"}), 400
+
+    mc_username = data["mc_username"].strip()
+    token = uuid.uuid4().hex
+
+    tokens = load_mc_tokens()
+    tokens[token] = {
+        "mc_username": mc_username,
+        "authenticated": False,
+        "web_username": None,
+        "created_at": time.time()
+    }
+    save_mc_tokens(tokens)
+
+    return jsonify({"token": token})
+
+
+@app.route("/api/mc-auth/check")
+def mc_auth_check():
+    token = request.args.get("token", "")
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    tokens = load_mc_tokens()
+    entry = tokens.get(token)
+    if not entry:
+        return jsonify({"error": "invalid token"}), 404
+
+    return jsonify({
+        "authenticated": entry["authenticated"],
+        "mc_username": entry["mc_username"],
+        "web_username": entry.get("web_username")
+    })
+
+
+@app.route("/mc-login", methods=["GET", "POST"])
+def mc_login():
+    token = request.args.get("token", "")
+    mc_username = request.args.get("mc_username", "")
+
+    if not token:
+        return redirect(url_for("home_redirect"))
+
+    tokens = load_mc_tokens()
+    entry = tokens.get(token)
+    if not entry:
+        return Response("Invalid or expired token", status=404)
+
+    if entry.get("authenticated"):
+        return Response(MC_SUCCESS_HTML, content_type="text/html")
+
+    error_html = ""
+    mc_info = f'<div class="mc-info">Connecting as: <strong>{entry["mc_username"]}</strong></div>'
+
+    if request.method == "POST":
+        form_token = request.form.get("token", "")
+        form_mc = request.form.get("mc_username", "")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if username == OWNER_USERNAME and password == OWNER_PASSWORD:
+            tokens = load_mc_tokens()
+            if form_token in tokens:
+                tokens[form_token]["authenticated"] = True
+                tokens[form_token]["web_username"] = username
+                save_mc_tokens(tokens)
+                return Response(MC_SUCCESS_HTML, content_type="text/html")
+        else:
+            error_html = '<div class="error">Invalid credentials.</div>'
+
+    page = MC_LOGIN_HTML
+    page = page.replace("%%TOKEN%%", token)
+    page = page.replace("%%MC_USERNAME%%", mc_username)
+    page = page.replace("%%MC_INFO%%", mc_info)
+    page = page.replace("%%ERROR_PLACEHOLDER%%", error_html)
+    return Response(page, content_type="text/html")
+
+
+def _keep_alive():
+    while True:
+        try:
+            url = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
+            urllib.request.urlopen(f"{url}/api/health", timeout=15)
+        except:
+            pass
+        time.sleep(300)
+
+
+threading.Thread(target=_keep_alive, daemon=True).start()
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    port_val = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port_val)
