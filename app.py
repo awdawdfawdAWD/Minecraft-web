@@ -271,6 +271,16 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .nav-links a:hover,.nav-links button:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
 .nav-dl-btn{background:var(--accent)!important;color:#fff!important;font-weight:600!important}
 .nav-dl-btn:hover{background:#9333ea!important}
+.nav-user{position:relative;display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border-radius:10px;cursor:pointer;transition:all 0.2s;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03)}
+.nav-user:hover{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)}
+.nav-user img{width:28px;height:28px;border-radius:6px;image-rendering:pixelated}
+.nav-user span{font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--paper)}
+.nav-user-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:rgba(22,22,28,0.95);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:6px;min-width:150px;backdrop-filter:blur(20px);box-shadow:0 12px 40px rgba(0,0,0,0.5);z-index:200}
+.nav-user.open .nav-user-menu{display:block}
+.nav-user-menu a{display:block;font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--muted);text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s}
+.nav-user-menu a:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
+.nav-user-menu a.red{color:#ef4444}
+.nav-user-menu a.red:hover{background:rgba(239,68,68,0.08)}
 .nav-dropdown{position:relative}
 .nav-dropdown-btn{font-family:var(--font);font-size:0.82rem;font-weight:500;color:var(--muted);padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px}
 .nav-dropdown-btn:hover{color:var(--paper);background:rgba(255,255,255,0.05)}
@@ -366,13 +376,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <a href="#features">Features</a>
     <a href="#changelog">Changelog</a>
     <a href="#install">Install</a>
-    <div class="nav-dropdown">
-      <button class="nav-dropdown-btn" onclick="this.parentElement.classList.toggle('open')">Login <span style="font-size:0.6rem">&#9662;</span></button>
-      <div class="nav-dropdown-menu">
-        <a href="/player-login">Player Login</a>
-        <a href="/login">Staff Login</a>
-      </div>
-    </div>
+    %%NAV_USER%%
     <a class="nav-dl-btn" href="%%CLIENT_URL%%">Download</a>
   </div>
 </div>
@@ -595,7 +599,7 @@ var dlObs = new IntersectionObserver(function(entries) {
 dlObs.observe(dlEl);
 
 document.addEventListener('click', function(e) {
-  document.querySelectorAll('.nav-dropdown.open').forEach(function(d) {
+  document.querySelectorAll('.nav-dropdown.open, .nav-user.open').forEach(function(d) {
     if (!d.contains(e.target)) d.classList.remove('open');
   });
 });
@@ -830,7 +834,28 @@ def home_redirect():
         fabric_url = version_info["fabric_url"]
         version_short = version_info["version"]
         version_full = "v" + version_short
+
+    if session.get("player_logged_in"):
+        username = session.get("player_user", "player")
+        nav_user = f'''<div class="nav-user" onclick="this.classList.toggle('open')">
+      <img src="https://mc-heads.net/avatar/{username}/64" alt="{username}" onerror="this.src='https://mc-heads.net/avatar/steve/64'">
+      <span>{username}</span>
+      <div class="nav-user-menu">
+        <a href="/player/profile">Profile</a>
+        <a href="/player-logout" class="red">Sign Out</a>
+      </div>
+    </div>'''
+    else:
+        nav_user = '''<div class="nav-dropdown">
+      <button class="nav-dropdown-btn" onclick="this.parentElement.classList.toggle('open')">Login <span style="font-size:0.6rem">&#9662;</span></button>
+      <div class="nav-dropdown-menu">
+        <a href="/player-login">Player Login</a>
+        <a href="/login">Staff Login</a>
+      </div>
+    </div>'''
+
     page = SITE_HTML_TEMPLATE
+    page = page.replace("%%NAV_USER%%", nav_user)
     page = page.replace("%%CLIENT_URL%%", client_url)
     page = page.replace("%%FABRIC_URL%%", fabric_url)
     page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
