@@ -170,7 +170,7 @@ def require_player_login(f):
 def fetch_latest_version():
     global _version_cache, _version_cache_time
     now = time.time()
-    if _version_cache and (now - _version_cache_time) < 300:
+    if _version_cache and (now - _version_cache_time) < 60:
         return _version_cache
 
     version_str = None
@@ -188,7 +188,10 @@ def fetch_latest_version():
 
     try:
         url = f"https://api.github.com/repos/{GITHUB_CLIENT_REPO}/releases/tags/CLient"
-        req = urllib.request.Request(url, headers={"User-Agent": "unkk-site"})
+        headers = {"User-Agent": "unkk-site"}
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
+        req = urllib.request.Request(url, headers=headers)
         resp = urllib.request.urlopen(req, timeout=10)
         data = json.loads(resp.read())
         for asset in data.get("assets", []):
@@ -221,6 +224,7 @@ def fetch_latest_version():
     }
     _version_cache = result
     _version_cache_time = now
+    print(f"[Version] Updated: {short_version} ({version_str})")
     return result
 
 _version_cache = None
@@ -932,6 +936,16 @@ def health():
 @app.route("/api/screenshots")
 def api_screenshots():
     return jsonify(fetch_screenshots_from_github())
+
+
+@app.route("/api/version")
+def api_version():
+    global _version_cache_time
+    _version_cache_time = 0
+    info = fetch_latest_version()
+    if info:
+        return jsonify(info)
+    return jsonify({"error": "failed to fetch version"}), 500
 
 
 @app.route("/login", methods=["GET", "POST"])
