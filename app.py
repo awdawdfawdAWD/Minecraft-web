@@ -172,35 +172,56 @@ def fetch_latest_version():
     now = time.time()
     if _version_cache and (now - _version_cache_time) < 300:
         return _version_cache
+
+    version_str = None
+    client_url = None
+    fabric_url = FABRIC_API_URL
+
+    try:
+        vurl = f"https://raw.githubusercontent.com/{GITHUB_CLIENT_REPO}/main/version.txt"
+        req = urllib.request.Request(vurl, headers={"User-Agent": "unkk-site"})
+        resp = urllib.request.urlopen(req, timeout=10)
+        version_str = resp.read().decode().strip()
+        print(f"[Version] From version.txt: {version_str}")
+    except Exception as e:
+        print(f"[Version] Failed to fetch version.txt: {e}")
+
     try:
         url = f"https://api.github.com/repos/{GITHUB_CLIENT_REPO}/releases/tags/CLient"
         req = urllib.request.Request(url, headers={"User-Agent": "unkk-site"})
         resp = urllib.request.urlopen(req, timeout=10)
         data = json.loads(resp.read())
-        latest_jar = None
-        fabric_jar = None
         for asset in data.get("assets", []):
             name = asset["name"]
             dl_url = asset["browser_download_url"]
             if name.startswith("unkk-") and name.endswith(".jar"):
-                latest_jar = {"name": name, "url": dl_url}
+                client_url = dl_url
+                if not version_str:
+                    version_raw = name.replace("unkk-", "").replace(".jar", "")
+                    parts = version_raw.split(".")
+                    version_str = ".".join(parts[:3]) if len(parts) >= 3 else version_raw
             elif "fabric" in name.lower():
-                fabric_jar = {"name": name, "url": dl_url}
-        if latest_jar:
-            version_raw = latest_jar["name"].replace("unkk-", "").replace(".jar", "")
-            parts = version_raw.split(".")
-            version = ".".join(parts[:3]) if len(parts) >= 3 else version_raw
-            result = {
-                "version": version,
-                "client_url": latest_jar["url"],
-                "fabric_url": fabric_jar["url"] if fabric_jar else FABRIC_API_URL
-            }
-            _version_cache = result
-            _version_cache_time = now
-            return result
+                fabric_url = dl_url
     except Exception as e:
-        print(f"Failed to fetch latest version: {e}")
-    return _version_cache
+        print(f"[Version] Failed to fetch release: {e}")
+
+    if not version_str:
+        return _version_cache
+
+    short_version = ".".join(version_str.split(".")[:3])
+
+    if not client_url:
+        client_url = f"https://github.com/{GITHUB_CLIENT_REPO}/releases/download/CLient/unkk-{version_str}.jar"
+
+    result = {
+        "version": short_version,
+        "version_full": version_str,
+        "client_url": client_url,
+        "fabric_url": fabric_url
+    }
+    _version_cache = result
+    _version_cache_time = now
+    return result
 
 _version_cache = None
 _version_cache_time = 0
@@ -839,7 +860,7 @@ def home_redirect():
         client_url = version_info["client_url"]
         fabric_url = version_info["fabric_url"]
         version_short = version_info["version"]
-        version_full = "v" + version_short
+        version_full = "v" + version_info.get("version_full", version_short)
 
     if session.get("player_logged_in"):
         username = session.get("player_user", "player")
