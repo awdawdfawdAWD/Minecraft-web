@@ -755,10 +755,16 @@ function switchTab(btn, tabId) {
   btn.classList.add('active');
   document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
   document.getElementById(tabId).classList.add('active');
+  history.replaceState(null, '', '#' + tabId.replace('tab-', ''));
 }
 var start = %%SERVER_START%%;
 function fmt(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=s%60,p=[];if(d)p.push(d+"d");if(h)p.push(h+"h");if(m)p.push(m+"m");p.push(sec+"s");return p.join(" ")}
 setInterval(function(){document.getElementById("uptime-val").innerText=fmt(Math.floor(Date.now()/1000-start))},1000);
+var hash = location.hash.replace('#','');
+if (hash === 'players') {
+  var btns = document.querySelectorAll('.tab-btn');
+  btns.forEach(function(b) { if (b.textContent.trim() === 'Players') b.click(); });
+}
 </script>
 </body>
 </html>"""
@@ -845,6 +851,17 @@ def home_redirect():
         <a href="/player-logout" class="red">Sign Out</a>
       </div>
     </div>'''
+    elif session.get("logged_in"):
+        staff_name = session.get("user", "staff")
+        nav_user = f'''<div class="nav-user" onclick="this.classList.toggle('open')">
+      <img src="https://mc-heads.net/avatar/{staff_name}/64" alt="{staff_name}" onerror="this.src='https://mc-heads.net/avatar/steve/64'">
+      <span>{staff_name}</span>
+      <div class="nav-user-menu">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/dashboard#players">Players</a>
+        <a href="/logout" class="red">Sign Out</a>
+      </div>
+    </div>'''
     else:
         nav_user = '''<div class="nav-dropdown">
       <button class="nav-dropdown-btn" onclick="this.parentElement.classList.toggle('open')">Login <span style="font-size:0.6rem">&#9662;</span></button>
@@ -899,7 +916,7 @@ def api_screenshots():
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     if session.get("logged_in"):
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("home_redirect"))
     error_html = ""
     if request.method == "POST":
         username = request.form.get("username", "")
@@ -907,7 +924,7 @@ def login_page():
         if username == OWNER_USERNAME and password == OWNER_PASSWORD:
             session["logged_in"] = True
             session["user"] = username
-            return redirect(url_for("admin_dashboard"))
+            return redirect(url_for("home_redirect"))
         else:
             error_html = '<div class="error">Invalid credentials.</div>'
     return Response(LOGIN_HTML.replace("ERROR_PLACEHOLDER", error_html), content_type="text/html")
