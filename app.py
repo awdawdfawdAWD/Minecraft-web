@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import hashlib
 import threading
 import uuid
 import urllib.request
@@ -24,6 +25,35 @@ DOWNLOAD_COUNT = 147
 APP_START_TIME = time.time()
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+
+PLAYERS_FILE = "players.json"
+
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def load_players():
+    try:
+        if os.path.exists(PLAYERS_FILE):
+            with open(PLAYERS_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_players(data):
+    try:
+        with open(PLAYERS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Error saving players: {e}")
+
+def require_player_login(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("player_logged_in"):
+            return redirect(url_for("player_login_page"))
+        return f(*args, **kwargs)
+    return decorated
 
 def fetch_latest_version():
     global _version_cache, _version_cache_time
@@ -211,7 +241,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <div class="nav-dropdown">
       <button class="nav-dropdown-btn" onclick="this.parentElement.classList.toggle('open')">Login <span style="font-size:0.6rem">&#9662;</span></button>
       <div class="nav-dropdown-menu">
-        <a href="/login">Player Login</a>
+        <a href="/player-login">Player Login</a>
         <a href="/login">Staff Login</a>
       </div>
     </div>
@@ -742,6 +772,221 @@ def edit_links():
     page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
     page = page.replace("%%SAVED_MSG%%", saved_msg)
     return Response(page, content_type="text/html")
+
+
+PLAYER_LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - player login</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.bg{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(168,85,247,0.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,0.06) 0%,transparent 60%);z-index:0}
+.card{position:relative;z-index:1;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;width:360px;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+h2{font-size:1.3rem;font-weight:700;margin-bottom:6px;text-align:center}
+.sub{font-size:0.8rem;color:#8a877e;text-align:center;margin-bottom:30px}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
+label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+input{width:100%;padding:12px 14px;background:rgba(12,12,16,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+input:focus{border-color:#a855f7}
+button{width:100%;padding:12px;background:#a855f7;color:#fff;border:none;border-radius:8px;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px rgba(168,85,247,0.3)}
+.bottom-link{display:block;text-align:center;margin-top:16px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.bottom-link:hover{color:#f0ede8}
+.back{display:block;text-align:center;margin-top:12px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.back:hover{color:#f0ede8}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <h2>&#x1F3AE; Player Login</h2>
+  <div class="sub">sign in to your unkk account</div>
+  %%ERROR_PLACEHOLDER%%
+  <form method="POST">
+    <label>username</label>
+    <input type="text" name="username" placeholder="username" required autofocus>
+    <label>password</label>
+    <input type="password" name="password" placeholder="password" required>
+    <button type="submit">sign in</button>
+  </form>
+  <a href="/player-register" class="bottom-link">Don't have an account? Register</a>
+  <a href="/" class="back">&larr; back to site</a>
+</div>
+</body>
+</html>"""
+
+PLAYER_REGISTER_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - register</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.bg{position:fixed;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(168,85,247,0.08) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,0.06) 0%,transparent 60%);z-index:0}
+.card{position:relative;z-index:1;background:rgba(22,22,28,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;width:360px;backdrop-filter:blur(20px);box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+h2{font-size:1.3rem;font-weight:700;margin-bottom:6px;text-align:center}
+.sub{font-size:0.8rem;color:#8a877e;text-align:center;margin-bottom:30px}
+.error{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;padding:10px;border-radius:8px;font-size:0.8rem;margin-bottom:20px;text-align:center}
+label{display:block;font-size:0.72rem;color:#8a877e;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px}
+input{width:100%;padding:12px 14px;background:rgba(12,12,16,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:8px;color:#f0ede8;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+input:focus{border-color:#a855f7}
+button{width:100%;padding:12px;background:#a855f7;color:#fff;border:none;border-radius:8px;font-family:'Space Grotesk',sans-serif;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px rgba(168,85,247,0.3)}
+.bottom-link{display:block;text-align:center;margin-top:16px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.bottom-link:hover{color:#f0ede8}
+.back{display:block;text-align:center;margin-top:12px;font-size:0.8rem;color:#8a877e;text-decoration:none;transition:color 0.2s}
+.back:hover{color:#f0ede8}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="card">
+  <h2>&#x1F511; Register</h2>
+  <div class="sub">create your unkk account</div>
+  %%ERROR_PLACEHOLDER%%
+  <form method="POST">
+    <label>username</label>
+    <input type="text" name="username" placeholder="username" required autofocus>
+    <label>email</label>
+    <input type="email" name="email" placeholder="email" required>
+    <label>password</label>
+    <input type="password" name="password" placeholder="password" required minlength="6">
+    <button type="submit">create account</button>
+  </form>
+  <a href="/player-login" class="bottom-link">Already have an account? Login</a>
+  <a href="/" class="back">&larr; back to site</a>
+</div>
+</body>
+</html>"""
+
+
+@app.route("/player-login", methods=["GET", "POST"])
+def player_login_page():
+    if session.get("player_logged_in"):
+        return redirect(url_for("player_profile"))
+    error_html = ""
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        players = load_players()
+        if username in players and players[username]["pw"] == hash_pw(password):
+            session["player_logged_in"] = True
+            session["player_user"] = username
+            return redirect(url_for("player_profile"))
+        else:
+            error_html = '<div class="error">Invalid username or password.</div>'
+    return Response(PLAYER_LOGIN_HTML.replace("%%ERROR_PLACEHOLDER%%", error_html), content_type="text/html")
+
+
+@app.route("/player-register", methods=["GET", "POST"])
+def player_register_page():
+    if session.get("player_logged_in"):
+        return redirect(url_for("player_profile"))
+    error_html = ""
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        if not username or not email or not password:
+            error_html = '<div class="error">All fields are required.</div>'
+        elif len(password) < 6:
+            error_html = '<div class="error">Password must be at least 6 characters.</div>'
+        else:
+            players = load_players()
+            if username in players:
+                error_html = '<div class="error">Username already taken.</div>'
+            else:
+                players[username] = {
+                    "pw": hash_pw(password),
+                    "email": email,
+                    "joined": int(time.time())
+                }
+                save_players(players)
+                session["player_logged_in"] = True
+                session["player_user"] = username
+                return redirect(url_for("player_profile"))
+    return Response(PLAYER_REGISTER_HTML.replace("%%ERROR_PLACEHOLDER%%", error_html), content_type="text/html")
+
+
+@app.route("/player/profile")
+@require_player_login
+def player_profile():
+    username = session.get("player_user", "")
+    players = load_players()
+    player = players.get(username, {})
+    joined = time.strftime("%b %d, %Y", time.gmtime(player.get("joined", 0)))
+    email = player.get("email", "")
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh}}
+.dash-nav{{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(12,12,16,0.9);border-bottom:1px solid rgba(255,255,255,0.04);backdrop-filter:blur(20px)}}
+.dash-nav .logo{{font-weight:700;font-size:1rem}}.dash-nav .logo span{{color:#a855f7}}
+.dash-nav .right{{display:flex;gap:12px;align-items:center}}
+.dash-nav a,.dash-nav button{{font-size:0.8rem;color:#8a877e;text-decoration:none;padding:8px 16px;border-radius:8px;border:none;background:none;cursor:pointer;font-family:inherit;transition:all 0.2s}}
+.dash-nav a:hover,.dash-nav button:hover{{color:#f0ede8;background:rgba(255,255,255,0.05)}}
+.dash-nav .logout{{color:#ef4444;border:1px solid rgba(239,68,68,0.2)}}
+.dash-nav .logout:hover{{background:rgba(239,68,68,0.1)}}
+.container{{max-width:600px;margin:0 auto;padding:40px}}
+.section-title{{font-size:0.72rem;color:#a855f7;text-transform:uppercase;letter-spacing:2px;font-family:'JetBrains Mono',monospace;margin-bottom:8px}}
+h1{{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}}
+.panel{{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:30px;margin-bottom:20px}}
+.panel h3{{font-size:0.95rem;font-weight:600;margin-bottom:20px}}
+.info-row{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.85rem;gap:20px}}
+.info-row:last-child{{border-bottom:none}}
+.info-row .k{{color:#8a877e;min-width:100px;flex-shrink:0}}
+.info-row .v{{color:#f0ede8;font-family:'JetBrains Mono',monospace;font-size:0.78rem}}
+.badge{{display:inline-block;padding:3px 10px;border-radius:6px;font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}}
+.badge-green{{background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)}}
+</style>
+</head>
+<body>
+<div class="dash-nav">
+  <div class="logo">unk<span>k</span> profile</div>
+  <div class="right">
+    <a href="/">view site</a>
+    <button class="logout" onclick="location.href='/player-logout'">sign out</button>
+  </div>
+</div>
+<div class="container">
+  <div class="section-title">// account</div>
+  <h1>Welcome, {username}</h1>
+  <div class="panel">
+    <h3>Account Info</h3>
+    <div class="info-row"><span class="k">Username</span><span class="v">{username}</span></div>
+    <div class="info-row"><span class="k">Email</span><span class="v">{email}</span></div>
+    <div class="info-row"><span class="k">Joined</span><span class="v">{joined}</span></div>
+    <div class="info-row"><span class="k">Status</span><span class="v"><span class="badge badge-green">Active</span></span></div>
+  </div>
+  <div class="panel">
+    <h3>Client</h3>
+    <div class="info-row"><span class="k">Minecraft</span><span class="v">1.21+</span></div>
+    <div class="info-row"><span class="k">Mod Loader</span><span class="v">Fabric</span></div>
+  </div>
+</div>
+</body>
+</html>"""
+    return Response(page, content_type="text/html")
+
+
+@app.route("/player-logout")
+def player_logout():
+    session.pop("player_logged_in", None)
+    session.pop("player_user", None)
+    return redirect(url_for("home_redirect"))
 
 
 MC_TOKENS_FILE = "mc_tokens.json"
