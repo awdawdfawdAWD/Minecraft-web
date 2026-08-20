@@ -21,32 +21,17 @@ DOWNLOAD_COUNT = 147
 APP_START_TIME = time.time()
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
-def fetch_github_release_info():
-    info = {"client_version": "62.0.0", "mc_version": "26.2", "release_name": "26.2 Minecraft Client"}
-    try:
-        url = "https://api.github.com/repos/awdawdfawdAWD/MC-CLIENT/releases/tags/CLient"
-        req = urllib.request.Request(url, headers={"User-Agent": "unkk-client-site"})
-        resp = urllib.request.urlopen(req, timeout=10)
-        data = json.loads(resp.read())
-        info["release_name"] = data.get("name", info["release_name"])
-        for asset in data.get("assets", []):
-            name = asset.get("name", "")
-            if name.startswith("unkk-") and name.endswith(".jar"):
-                parts = name.replace("unkk-", "").replace(".jar", "").split(".")
-                if len(parts) >= 3:
-                    info["client_version"] = parts[0] + "." + parts[1] + "." + parts[2]
-            if name.startswith("fabric-api-") and "+" in name:
-                info["mc_version"] = name.split("+")[-1].replace(".jar", "")
-    except Exception as e:
-        print("GitHub release fetch error: " + str(e))
-    return info
+MC_VER = os.environ.get("MC_VERSION", "26.2")
+CLIENT_VER = os.environ.get("CLIENT_VERSION", "62.0.0")
+RELEASE_NAME = os.environ.get("RELEASE_NAME", "26.2 Minecraft Client")
 
-RELEASE_INFO = fetch_github_release_info()
-MC_VER = RELEASE_INFO["mc_version"]
-CLIENT_VER = RELEASE_INFO["client_version"]
-RELEASE_NAME = RELEASE_INFO["release_name"]
+_screenshots_cache = None
+_screenshots_cache_time = 0
 
 def fetch_screenshots_from_github():
+    global _screenshots_cache, _screenshots_cache_time
+    if _screenshots_cache is not None and (time.time() - _screenshots_cache_time) < 300:
+        return _screenshots_cache
     try:
         url = "https://api.github.com/repos/" + GITHUB_REPO + "/contents/" + GITHUB_SCREENSHOTS_FOLDER
         req = urllib.request.Request(url, headers={"User-Agent": "unkk-client-site"})
@@ -57,10 +42,12 @@ def fetch_screenshots_from_github():
             name = item.get("name", "")
             if any(name.lower().endswith(ext) for ext in IMAGE_EXTS):
                 images.append({"name": name, "url": GITHUB_RAW_BASE + "/" + name})
+        _screenshots_cache = images
+        _screenshots_cache_time = time.time()
         return images
     except Exception as e:
         print("GitHub screenshot fetch error: " + str(e))
-        return []
+        return _screenshots_cache if _screenshots_cache is not None else []
 
 def require_login(f):
     @wraps(f)
