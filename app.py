@@ -16,6 +16,7 @@ OWNER_PASSWORD = os.environ.get("OWNER_PASS", "changeme")
 CLIENT_URL = os.environ.get("CLIENT_URL", "https://github.com/awdawdfawdAWD/MC-CLIENT/releases/download/CLient/unkk-62.0.0.20260820.085414.jar")
 FABRIC_API_URL = os.environ.get("FABRIC_URL", "https://github.com/awdawdfawdAWD/MC-CLIENT/releases/download/CLient/fabric-api-0.156.0+26.2.jar")
 GITHUB_REPO = "awdawdfawdAWD/Minecraft-web"
+GITHUB_CLIENT_REPO = "awdawdfawdAWD/MC-CLIENT"
 GITHUB_SCREENSHOTS_FOLDER = "screenshots"
 GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_SCREENSHOTS_FOLDER}"
 
@@ -23,6 +24,44 @@ DOWNLOAD_COUNT = 147
 APP_START_TIME = time.time()
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+
+def fetch_latest_version():
+    global _version_cache, _version_cache_time
+    now = time.time()
+    if _version_cache and (now - _version_cache_time) < 300:
+        return _version_cache
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_CLIENT_REPO}/releases/tags/CLient"
+        req = urllib.request.Request(url, headers={"User-Agent": "unkk-site"})
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read())
+        latest_jar = None
+        fabric_jar = None
+        for asset in data.get("assets", []):
+            name = asset["name"]
+            dl_url = asset["browser_download_url"]
+            if name.startswith("unkk-") and name.endswith(".jar"):
+                latest_jar = {"name": name, "url": dl_url}
+            elif "fabric" in name.lower():
+                fabric_jar = {"name": name, "url": dl_url}
+        if latest_jar:
+            version_raw = latest_jar["name"].replace("unkk-", "").replace(".jar", "")
+            parts = version_raw.split(".")
+            version = ".".join(parts[:3]) if len(parts) >= 3 else version_raw
+            result = {
+                "version": version,
+                "client_url": latest_jar["url"],
+                "fabric_url": fabric_jar["url"] if fabric_jar else FABRIC_API_URL
+            }
+            _version_cache = result
+            _version_cache_time = now
+            return result
+    except Exception as e:
+        print(f"Failed to fetch latest version: {e}")
+    return _version_cache
+
+_version_cache = None
+_version_cache_time = 0
 
 
 def fetch_screenshots_from_github():
@@ -162,11 +201,12 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <a href="#features">Features</a>
     <a href="#changelog">Changelog</a>
     <a href="#install">Install</a>
+    <a href="/login">Login</a>
     <a class="nav-dl-btn" href="%%CLIENT_URL%%">Download</a>
   </div>
 </div>
 <section class="hero">
-  <div class="hero-tag">v62.0.0 stable release</div>
+  <div class="hero-tag">%%VERSION%% stable release</div>
   <h1>unkk<br><em>client</em></h1>
   <p class="hero-desc">A fabric-based minecraft client made for people who actually care about how the game looks and feels. built different.</p>
   <div class="hero-actions">
@@ -181,7 +221,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
   </div>
   <div class="hero-stats">
     <div class="stat-block"><div class="num" id="dl-count">%%DOWNLOAD_COUNT%%</div><div class="label">Downloads</div></div>
-    <div class="stat-block"><div class="num">62.0.0</div><div class="label">Latest Version</div></div>
+    <div class="stat-block"><div class="num">%%VERSION%%</div><div class="label">Latest Version</div></div>
     <div class="stat-block"><div class="num">1.21+</div><div class="label">Fabric</div></div>
   </div>
 </section>
@@ -240,7 +280,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <h2 style="font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px">Changelog</h2>
   </div>
   <div class="reveal">
-    <div class="cl-item"><div class="cl-version">v62.0.0</div><div class="cl-body"><h4><span class="cl-tag new">new</span> Major Client Release</h4><p>Full rewrite of the rendering pipeline. New HUD system, entity culling, and custom shader support added.</p><div class="cl-date">aug 20 2026</div></div></div>
+    <div class="cl-item"><div class="cl-version">%%VERSION_FULL%%</div><div class="cl-body"><h4><span class="cl-tag new">new</span> Major Client Release</h4><p>Full rewrite of the rendering pipeline. New HUD system, entity culling, and custom shader support added.</p><div class="cl-date">aug 20 2026</div></div></div>
     <div class="cl-item"><div class="cl-version">v61.3.2</div><div class="cl-body"><h4><span class="cl-tag fix">fix</span> Fabric Compatibility</h4><p>Fixed crash on startup with fabric-api 0.156.0. Resolved mod loader conflict with Sodium.</p><div class="cl-date">aug 12 2026</div></div></div>
   </div>
 </section>
@@ -477,7 +517,7 @@ h1{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
   <h1>Dashboard</h1>
   <div class="stat-row">
     <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Total Downloads</div></div>
-    <div class="stat-card"><div class="val">v62.0.0</div><div class="lbl">Current Version</div></div>
+    <div class="stat-card"><div class="val">%%VERSION%%</div><div class="lbl">Current Version</div></div>
     <div class="stat-card"><div class="val" id="uptime-val">--</div><div class="lbl">Uptime</div></div>
   </div>
   <div class="panel">
@@ -575,11 +615,23 @@ h1{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
 @app.route("/")
 def home_redirect():
     screenshots = fetch_screenshots_from_github()
+    version_info = fetch_latest_version()
+    client_url = CLIENT_URL
+    fabric_url = FABRIC_API_URL
+    version_short = "62.0.0"
+    version_full = "v62.0.0"
+    if version_info:
+        client_url = version_info["client_url"]
+        fabric_url = version_info["fabric_url"]
+        version_short = version_info["version"]
+        version_full = "v" + version_short
     page = SITE_HTML_TEMPLATE
-    page = page.replace("%%CLIENT_URL%%", CLIENT_URL)
-    page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
+    page = page.replace("%%CLIENT_URL%%", client_url)
+    page = page.replace("%%FABRIC_URL%%", fabric_url)
     page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
     page = page.replace("%%IMAGES_JSON%%", json.dumps(screenshots))
+    page = page.replace("%%VERSION%%", version_short)
+    page = page.replace("%%VERSION_FULL%%", version_full)
     return Response(page, content_type="text/html")
 
 
@@ -587,7 +639,9 @@ def home_redirect():
 def download_client():
     global DOWNLOAD_COUNT
     DOWNLOAD_COUNT += 1
-    return redirect(CLIENT_URL)
+    version_info = fetch_latest_version()
+    url = version_info["client_url"] if version_info else CLIENT_URL
+    return redirect(url)
 
 
 @app.route("/api/download/fabric")
@@ -638,11 +692,16 @@ def logout():
 @app.route("/dashboard")
 @require_login
 def admin_dashboard():
+    version_info = fetch_latest_version()
+    version_short = version_info["version"] if version_info else "62.0.0"
+    client_url = version_info["client_url"] if version_info else CLIENT_URL
+    fabric_url = version_info["fabric_url"] if version_info else FABRIC_API_URL
     page = DASHBOARD_HTML
     page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
-    page = page.replace("%%CLIENT_URL%%", CLIENT_URL)
-    page = page.replace("%%FABRIC_URL%%", FABRIC_API_URL)
+    page = page.replace("%%CLIENT_URL%%", client_url)
+    page = page.replace("%%FABRIC_URL%%", fabric_url)
     page = page.replace("%%SERVER_START%%", str(int(APP_START_TIME)))
+    page = page.replace("%%VERSION%%", version_short)
     return Response(page, content_type="text/html")
 
 
