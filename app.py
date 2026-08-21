@@ -1204,7 +1204,7 @@ button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px
     <label>username</label>
     <input type="text" name="username" placeholder="username" required autofocus>
     <label>email</label>
-    <input type="email" name="email" placeholder="email" required>
+    <input type="email" name="email" placeholder="email (optional)">
     <label>password</label>
     <input type="password" name="password" placeholder="password" required minlength="6">
     <button type="submit">create account</button>
@@ -1243,8 +1243,8 @@ def player_register_page():
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        if not username or not email or not password:
-            error_html = '<div class="error">All fields are required.</div>'
+        if not username or not password:
+            error_html = '<div class="error">Username and password are required.</div>'
         elif len(password) < 6:
             error_html = '<div class="error">Password must be at least 6 characters.</div>'
         else:
