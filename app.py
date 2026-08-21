@@ -1094,7 +1094,8 @@ def admin_dashboard():
         hwid = pdata.get("hwid", "Not set")
         hwid_short = hwid[:20] + "..." if len(hwid) > 20 else hwid
         email = pdata.get("email", "")
-        player_rows += f'<tr><td><strong>{uname}</strong></td><td>{email}</td><td class="hwid" title="{hwid}">{hwid_short}</td><td>{joined}</td><td><form method="POST" action="/staff/reset-hwid" style="display:inline"><input type="hidden" name="username" value="{uname}"><button class="btn-sm btn-reset" type="submit">Reset HWID</button></form></td></tr>'
+        skin_url = f"https://mc-heads.net/avatar/{uname}/32"
+        player_rows += f'<tr><td><img src="{skin_url}" width="28" height="28" style="border-radius:4px;image-rendering:pixelated;vertical-align:middle;margin-right:8px" onerror="this.style.display=\'none\'"><strong>{uname}</strong></td><td>{email}</td><td class="hwid" title="{hwid}">{hwid_short}</td><td>{joined}</td><td><form method="POST" action="/staff/reset-hwid" style="display:inline"><input type="hidden" name="username" value="{uname}"><button class="btn-sm btn-reset" type="submit">Reset HWID</button></form></td></tr>'
     if not player_rows:
         player_rows = '<tr><td colspan="5" class="empty">No players registered yet</td></tr>'
     page = DASHBOARD_HTML
@@ -1340,6 +1341,7 @@ h1{{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}}
 <div class="container">
   <div class="section-title">// account</div>
   <h1>Welcome, {username}</h1>
+  <div style="text-align:center;margin-bottom:24px"><img src="https://mc-heads.net/avatar/{username}/128" width="96" height="96" style="border-radius:12px;image-rendering:pixelated;border:2px solid rgba(168,85,247,0.3)" onerror="this.style.display='none'"></div>
   <div class="panel">
     <h3>Account Info</h3>
     <div class="info-row"><span class="k">Username</span><span class="v">{username}</span></div>
@@ -1564,7 +1566,8 @@ def player_info():
         "email": email if email else "(not set)",
         "joined": joined,
         "hwid": hwid if hwid else "",
-        "status": status
+        "status": status,
+        "skin_face": f"https://mc-heads.net/avatar/{username}/128"
     })
 
 
