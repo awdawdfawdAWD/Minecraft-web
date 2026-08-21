@@ -1182,6 +1182,8 @@ def player_profile():
     player = players.get(username, {})
     joined = time.strftime("%b %d, %Y", time.gmtime(player.get("joined", 0)))
     email = player.get("email", "")
+    hwid = player.get("hwid", "")
+    hwid_display = hwid[:24] + "..." if len(hwid) > 24 else (hwid if hwid else "Not bound")
     page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1230,11 +1232,13 @@ h1{{font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}}
     <div class="info-row"><span class="k">Email</span><span class="v">{email}</span></div>
     <div class="info-row"><span class="k">Joined</span><span class="v">{joined}</span></div>
     <div class="info-row"><span class="k">Status</span><span class="v"><span class="badge badge-green">Active</span></span></div>
+    <div class="info-row"><span class="k">HWID</span><span class="v">{hwid_display}</span></div>
   </div>
   <div class="panel">
     <h3>Client</h3>
-    <div class="info-row"><span class="k">Minecraft</span><span class="v">1.21+</span></div>
+    <div class="info-row"><span class="k">Minecraft</span><span class="v">26.2</span></div>
     <div class="info-row"><span class="k">Mod Loader</span><span class="v">Fabric</span></div>
+    <div class="info-row"><span class="k">Client</span><span class="v">unkk client</span></div>
   </div>
 </div>
 </body>
