@@ -796,7 +796,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 </div>
 <div class="container">
   <div class="tag">// staff panel</div>
-  <h1>Dashboard</h1>
+  <h1>Dashboard %%OWNER_DASH_TAG%%</h1>
   <div class="stat-row">
     <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Downloads</div></div>
     <div class="stat-card"><div class="val">%%PLAYER_COUNT%%</div><div class="lbl">Players</div></div>
@@ -933,9 +933,12 @@ def home_redirect():
     </div>'''
     elif session.get("logged_in"):
         staff_name = session.get("user", "staff")
+        owner_tag = ""
+        if staff_name == OWNER_USERNAME:
+            owner_tag = ' <span style="font-size:0.6rem;background:rgba(168,85,247,0.2);color:#a855f7;padding:2px 6px;border-radius:4px;border:1px solid rgba(168,85,247,0.3);font-weight:700;letter-spacing:0.5px;vertical-align:middle;margin-left:2px">OWNER</span>'
         nav_user = f'''<div class="nav-user" onclick="this.classList.toggle('open')">
       <img src="https://mc-heads.net/avatar/{staff_name}/64" alt="{staff_name}" onerror="this.src='https://mc-heads.net/avatar/steve/64'">
-      <span>{staff_name}</span>
+      <span>{staff_name}{owner_tag}</span>
       <div class="nav-user-menu">
         <a href="/dashboard">Dashboard</a>
         <a href="/dashboard#players">Players</a>
@@ -1045,6 +1048,10 @@ def admin_dashboard():
     if not player_rows:
         player_rows = '<tr><td colspan="5" class="empty">No players registered yet</td></tr>'
     page = DASHBOARD_HTML
+    owner_dash_tag = ""
+    if session.get("user") == OWNER_USERNAME:
+        owner_dash_tag = ' <span style="font-size:0.7rem;background:rgba(168,85,247,0.2);color:#a855f7;padding:4px 10px;border-radius:6px;border:1px solid rgba(168,85,247,0.3);font-weight:700;letter-spacing:0.5px;vertical-align:middle">OWNER</span>'
+    page = page.replace("%%OWNER_DASH_TAG%%", owner_dash_tag)
     page = page.replace("%%DOWNLOAD_COUNT%%", str(get_download_count()))
     page = page.replace("%%ONLINE_COUNT%%", str(get_online_count()))
     page = page.replace("%%CLIENT_URL%%", client_url)
@@ -1467,10 +1474,17 @@ def player_check_hwid():
     if username not in players:
         return jsonify({"error": "Account not found"}), 404
     stored_hwid = players[username].get("hwid", "")
+    hwid_bound = False
+    if not stored_hwid:
+        players[username]["hwid"] = hwid
+        save_players(players)
+        stored_hwid = hwid
+        hwid_bound = True
     return jsonify({
         "hwid_set": bool(stored_hwid),
         "matches": stored_hwid == hwid if stored_hwid else False,
-        "hwid": stored_hwid
+        "hwid": stored_hwid,
+        "hwid_bound": hwid_bound
     })
 
 
