@@ -709,7 +709,7 @@ function liveUpdate() {
     }
   }).catch(function(){});
 }
-setInterval(liveUpdate, 15000);
+setInterval(liveUpdate, 5000);
 
 document.addEventListener('click', function(e) {
   document.querySelectorAll('.nav-dropdown.open, .nav-user.open').forEach(function(d) {
@@ -888,7 +888,7 @@ function dashLiveUpdate() {
     if (d.version) { var el = document.getElementById('dash-version'); if(el) el.innerText = d.version; }
   }).catch(function(){});
 }
-setInterval(dashLiveUpdate, 15000);
+setInterval(dashLiveUpdate, 5000);
 </script>
 </body>
 </html>"""
