@@ -455,7 +455,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
     <a href="#changelog">Changelog</a>
     <a href="#install">Install</a>
     %%NAV_USER%%
-    <a class="nav-dl-btn" href="%%CLIENT_URL%%">Download</a>
+    <a class="nav-dl-btn" href="/api/download/client">Download</a>
   </div>
 </div>
 <section class="hero">
@@ -463,11 +463,11 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
   <h1>unkk<br><em>client</em></h1>
   <p class="hero-desc">A fabric-based minecraft client made for people who actually care about how the game looks and feels. built different.</p>
   <div class="hero-actions">
-    <a href="%%CLIENT_URL%%" class="btn-main">
+    <a href="/api/download/client" class="btn-main">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download Client
     </a>
-    <a href="%%FABRIC_URL%%" class="btn-main btn-outline">
+    <a href="/api/download/fabric" class="btn-main btn-outline">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       Fabric API
     </a>
@@ -554,7 +554,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
 <footer class="site-footer">
   <div class="footer-left">unkk client &mdash; not affiliated with mojang or microsoft</div>
   <div class="footer-links">
-    <a href="%%CLIENT_URL%%">Download</a>
+    <a href="/api/download/client">Download</a>
     <a href="https://github.com/awdawdfawdAWD/MC-CLIENT" target="_blank">GitHub</a>
   </div>
 </footer>
