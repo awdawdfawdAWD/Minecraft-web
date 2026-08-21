@@ -1,8 +1,8 @@
 {
   "02f8f04120ca4b6ca1e64fc3d2ac5132": {
     "mc_username": "ERROR42222",
-    "authenticated": false,
-    "web_username": null,
+    "authenticated": true,
+    "web_username": "KKK",
     "created_at": 1787308104.656797
   }
 }
