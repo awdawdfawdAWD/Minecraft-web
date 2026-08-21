@@ -1426,18 +1426,24 @@ def player_info():
     if not username:
         return jsonify({"error": "username required"}), 400
     players = load_players()
-    player = players.get(username)
-    if not player:
-        return jsonify({"error": "player not found"}), 404
-    joined = time.strftime("%b %d, %Y", time.gmtime(player.get("joined", 0)))
-    hwid = player.get("hwid", "")
-    email = player.get("email", "")
+    player = players.get(username, {})
+    joined = ""
+    email = ""
+    hwid = ""
+    status = "Active"
+    if player:
+        joined = time.strftime("%b %d, %Y", time.gmtime(player.get("joined", 0)))
+        email = player.get("email", "")
+        hwid = player.get("hwid", "")
+    else:
+        mc_ver = os.environ.get("MC_VERSION", "26.2")
+        joined = "MC Auth User"
     return jsonify({
         "username": username,
-        "email": email,
+        "email": email if email else "(not set)",
         "joined": joined,
-        "hwid": hwid,
-        "status": "Active"
+        "hwid": hwid if hwid else "",
+        "status": status
     })
 
 
