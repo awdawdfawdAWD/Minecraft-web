@@ -33,6 +33,7 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 PLAYERS_FILE = "players.json"
 MC_TOKENS_FILE = "mc_tokens.json"
+THEMES_FILE = "themes.json"
 
 
 def hash_pw(pw):
@@ -158,6 +159,14 @@ def load_mc_tokens():
 
 def save_mc_tokens(data):
     storage.save(MC_TOKENS_FILE, data)
+
+
+def load_themes():
+    return storage.load(THEMES_FILE, default=[])
+
+
+def save_themes(data):
+    storage.save(THEMES_FILE, data)
 
 
 def load_stats():
@@ -1636,6 +1645,111 @@ def online_count():
     return jsonify({"online": get_online_count()})
 
 
+THEMES_PAGE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>unkk - themes</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:#0c0c10;color:#f0ede8;min-height:100vh;padding:60px 20px}
+.wrap{max-width:900px;margin:0 auto}
+h1{font-size:2rem;font-weight:700;margin-bottom:8px}
+.sub{color:#8a877e;font-size:0.85rem;margin-bottom:30px}
+.card{background:rgba(22,22,28,0.6);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:20px;margin-bottom:14px;display:flex;align-items:center;gap:16px;transition:border-color 0.2s}
+.card:hover{border-color:rgba(168,85,247,0.3)}
+.swatch{width:8px;border-radius:8px;align-self:stretch;flex-shrink:0}
+.card-body{flex:1}
+.card-name{font-weight:600;font-size:1rem;margin-bottom:2px}
+.card-meta{font-size:0.75rem;color:#8a877e}
+.card-dl{font-family:'Space Grotesk',sans-serif;padding:8px 18px;border:8px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:600;font-size:0.82rem;cursor:pointer;transition:all 0.2s;text-decoration:none;white-space:nowrap}
+.card-dl:hover{background:#a855f7;color:#fff}
+.empty{color:#8a877e;text-align:center;padding:60px 0;font-size:0.9rem}
+a{color:#a855f7;text-decoration:none}a:hover{text-decoration:underline}
+.back{display:inline-block;margin-bottom:20px;color:#8a877e;font-size:0.82rem;transition:color 0.2s}.back:hover{color:#f0ede8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="/" class="back">&larr; Back</a>
+  <h1>Community Themes</h1>
+  <p class="sub">Download and install custom themes for unkk client. Place .json theme files in your <code>unkk_themes</code> folder.</p>
+  <div id="themes"></div>
+</div>
+<script>
+fetch('/api/themes').then(r=>r.json()).then(d=>{
+  const el=document.getElementById('themes');
+  const themes=d.themes||[];
+  if(!themes.length){el.innerHTML='<div class="empty">No themes uploaded yet.</div>';return;}
+  el.innerHTML=themes.map(t=>'<div class="card"><div class="swatch" style="background:'+t.accent+'"></div><div class="card-body"><div class="card-name">'+esc(t.name)+'</div><div class="card-meta">by '+esc(t.author)+(t.description?' &mdash; '+esc(t.description):'')+' &middot; '+t.downloads+' downloads</div></div><a class="card-dl" href="/api/themes/'+encodeURIComponent(t.name)+'/download">Download</a></div>').join('');
+});
+function esc(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';}
+</script>
+</body></html>"""
+
+
+@app.route("/themes")
+def themes_page():
+    return Response(THEMES_PAGE_HTML, content_type="text/html")
+
+
+@app.route("/api/themes", methods=["GET"])
+def api_themes_list():
+    themes = load_themes()
+    return jsonify({"themes": themes})
+
+
+@app.route("/api/themes/upload", methods=["POST"])
+def api_themes_upload():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    name = (data.get("name") or "").strip()
+    author = (data.get("author") or "").strip()
+    description = (data.get("description") or "").strip()
+    accent = (data.get("accent") or "#A855F7").strip()
+    accent2 = (data.get("accent2") or "#6366F1").strip()
+    builtin = data.get("builtin") or {}
+    if not name or not author:
+        return jsonify({"error": "name and author required"}), 400
+    themes = load_themes()
+    for t in themes:
+        if t["name"].lower() == name.lower():
+            t["author"] = author
+            t["description"] = description
+            t["accent"] = accent
+            t["accent2"] = accent2
+            if builtin:
+                t["builtin"] = builtin
+            save_themes(themes)
+            return jsonify({"ok": True, "updated": True})
+    themes.append({
+        "name": name,
+        "author": author,
+        "description": description,
+        "accent": accent,
+        "accent2": accent2,
+        "downloads": 0,
+        "builtin": builtin
+    })
+    save_themes(themes)
+    return jsonify({"ok": True, "created": True})
+
+
+@app.route("/api/themes/<name>/download", methods=["GET"])
+def api_theme_download(name):
+    themes = load_themes()
+    for t in themes:
+        if t["name"].lower() == name.lower():
+            t["downloads"] = t.get("downloads", 0) + 1
+            save_themes(themes)
+            theme_data = {k: v for k, v in t.items() if k != "downloads"}
+            return jsonify(theme_data)
+    return jsonify({"error": "Theme not found"}), 404
+
+
 def _keep_alive():
     while True:
         try:
@@ -1653,3 +1767,4 @@ seed_download_count()
 if __name__ == "__main__":
     port_val = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port_val)
+
