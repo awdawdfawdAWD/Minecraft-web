@@ -474,8 +474,8 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
   </div>
   <div class="hero-stats">
     <div class="stat-block"><div class="num" id="dl-count">%%DOWNLOAD_COUNT%%</div><div class="label">Downloads</div></div>
-    <div class="stat-block"><div class="num">%%ONLINE_COUNT%%</div><div class="label">Online Now</div></div>
-    <div class="stat-block"><div class="num">%%VERSION%%</div><div class="label">Latest Version</div></div>
+    <div class="stat-block"><div class="num" id="online-count">%%ONLINE_COUNT%%</div><div class="label">Online Now</div></div>
+    <div class="stat-block"><div class="num" id="version-display">%%VERSION%%</div><div class="label">Latest Version</div></div>
     <div class="stat-block"><div class="num">1.21+</div><div class="label">Fabric</div></div>
   </div>
 </section>
@@ -662,7 +662,10 @@ function animTrail() {
 animTrail();
 
 var dlEl = document.getElementById('dl-count');
+var onlineEl = document.getElementById('online-count');
+var versionEl = document.getElementById('version-display');
 var dlTarget = %%DOWNLOAD_COUNT%%;
+var dlAnimated = false;
 function animateCount(el, target) {
   var current = 0;
   var step = Math.max(1, Math.ceil(target / 60));
@@ -673,9 +676,23 @@ function animateCount(el, target) {
   }, 16);
 }
 var dlObs = new IntersectionObserver(function(entries) {
-  if (entries[0].isIntersecting) { animateCount(dlEl, dlTarget); dlObs.disconnect(); }
+  if (entries[0].isIntersecting) { animateCount(dlEl, dlTarget); dlAnimated = true; dlObs.disconnect(); }
 }, { threshold: 0.5 });
 dlObs.observe(dlEl);
+
+function liveUpdate() {
+  fetch('/api/health').then(function(r){return r.json()}).then(function(d){
+    if (d.downloads !== undefined) {
+      dlTarget = d.downloads;
+      if (dlAnimated) dlEl.innerText = d.downloads;
+    }
+    if (d.online !== undefined && onlineEl) onlineEl.innerText = d.online;
+  }).catch(function(){});
+  fetch('/api/version').then(function(r){return r.json()}).then(function(d){
+    if (d.version && versionEl) versionEl.innerText = d.version;
+  }).catch(function(){});
+}
+setInterval(liveUpdate, 15000);
 
 document.addEventListener('click', function(e) {
   document.querySelectorAll('.nav-dropdown.open, .nav-user.open').forEach(function(d) {
@@ -798,10 +815,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="tag">// staff panel</div>
   <h1>Dashboard %%OWNER_DASH_TAG%%</h1>
   <div class="stat-row">
-    <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Downloads</div></div>
+    <div class="stat-card"><div class="val" id="dash-dl">%%DOWNLOAD_COUNT%%</div><div class="lbl">Downloads</div></div>
     <div class="stat-card"><div class="val">%%PLAYER_COUNT%%</div><div class="lbl">Players</div></div>
-    <div class="stat-card"><div class="val" style="color:var(--green)">%%ONLINE_COUNT%%</div><div class="lbl">Online Now</div></div>
-    <div class="stat-card"><div class="val">%%VERSION%%</div><div class="lbl">Client Version</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--green)" id="dash-online">%%ONLINE_COUNT%%</div><div class="lbl">Online Now</div></div>
+    <div class="stat-card"><div class="val" id="dash-version">%%VERSION%%</div><div class="lbl">Client Version</div></div>
     <div class="stat-card"><div class="val" id="uptime-val">--</div><div class="lbl">Uptime</div></div>
   </div>
   <div class="tab-bar">
@@ -845,6 +862,16 @@ if (hash === 'players') {
   var btns = document.querySelectorAll('.tab-btn');
   btns.forEach(function(b) { if (b.textContent.trim() === 'Players') b.click(); });
 }
+function dashLiveUpdate() {
+  fetch('/api/health').then(function(r){return r.json()}).then(function(d){
+    if (d.downloads !== undefined) { var el = document.getElementById('dash-dl'); if(el) el.innerText = d.downloads; }
+    if (d.online !== undefined) { var el2 = document.getElementById('dash-online'); if(el2) el2.innerText = d.online; }
+  }).catch(function(){});
+  fetch('/api/version').then(function(r){return r.json()}).then(function(d){
+    if (d.version) { var el = document.getElementById('dash-version'); if(el) el.innerText = d.version; }
+  }).catch(function(){});
+}
+setInterval(dashLiveUpdate, 15000);
 </script>
 </body>
 </html>"""
