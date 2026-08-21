@@ -24,7 +24,9 @@ GITHUB_SCREENSHOTS_FOLDER = "screenshots"
 GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/{GITHUB_SCREENSHOTS_FOLDER}"
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
-DOWNLOAD_COUNT = 147
+STATS_FILE = "stats.json"
+ONLINE_FILE = "online_players.json"
+ONLINE_TIMEOUT = 60
 APP_START_TIME = time.time()
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
@@ -157,6 +159,57 @@ def load_mc_tokens():
 def save_mc_tokens(data):
     storage.save(MC_TOKENS_FILE, data)
 
+
+def load_stats():
+    return storage.load(STATS_FILE, default={"downloads": 0})
+
+def save_stats(data):
+    storage.save(STATS_FILE, data)
+
+def get_download_count():
+    stats = load_stats()
+    return stats.get("downloads", 0)
+
+def increment_downloads():
+    stats = load_stats()
+    stats["downloads"] = stats.get("downloads", 0) + 1
+    save_stats(stats)
+
+def seed_download_count():
+    stats = load_stats()
+    if stats.get("downloads", 0) > 0:
+        return
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_CLIENT_REPO}/releases/tags/CLient"
+        headers = {"User-Agent": "unkk-site"}
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
+        req = urllib.request.Request(url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read())
+        total = sum(a.get("download_count", 0) for a in data.get("assets", []))
+        if total > 0:
+            stats["downloads"] = total
+            save_stats(stats)
+            print(f"[Stats] Seeded download count from GitHub: {total}")
+    except Exception as e:
+        print(f"[Stats] Failed to seed download count: {e}")
+
+def load_online():
+    return storage.load(ONLINE_FILE, default={})
+
+def save_online(data):
+    storage.save(ONLINE_FILE, data)
+
+def get_online_count():
+    online = load_online()
+    now = time.time()
+    return sum(1 for ts in online.values() if now - ts < ONLINE_TIMEOUT)
+
+def record_heartbeat(username):
+    online = load_online()
+    online[username] = time.time()
+    save_online(online)
 
 def require_player_login(f):
     @wraps(f)
@@ -421,6 +474,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
   </div>
   <div class="hero-stats">
     <div class="stat-block"><div class="num" id="dl-count">%%DOWNLOAD_COUNT%%</div><div class="label">Downloads</div></div>
+    <div class="stat-block"><div class="num">%%ONLINE_COUNT%%</div><div class="label">Online Now</div></div>
     <div class="stat-block"><div class="num">%%VERSION%%</div><div class="label">Latest Version</div></div>
     <div class="stat-block"><div class="num">1.21+</div><div class="label">Fabric</div></div>
   </div>
@@ -699,7 +753,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .tag{font-family:var(--mono);font-size:0.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
 h1{font-size:2rem;font-weight:700;letter-spacing:-1px;margin-bottom:40px}
 h1 em{font-style:normal;color:var(--accent)}
-.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px}
+.stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:40px}
 .stat-card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:22px;transition:all 0.3s}
 .stat-card:hover{border-color:rgba(168,85,247,0.2);transform:translateY(-2px)}
 .stat-card .val{font-size:1.8rem;font-weight:700;font-family:var(--mono);margin-bottom:4px}
@@ -746,6 +800,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   <div class="stat-row">
     <div class="stat-card"><div class="val">%%DOWNLOAD_COUNT%%</div><div class="lbl">Downloads</div></div>
     <div class="stat-card"><div class="val">%%PLAYER_COUNT%%</div><div class="lbl">Players</div></div>
+    <div class="stat-card"><div class="val" style="color:var(--green)">%%ONLINE_COUNT%%</div><div class="lbl">Online Now</div></div>
     <div class="stat-card"><div class="val">%%VERSION%%</div><div class="lbl">Client Version</div></div>
     <div class="stat-card"><div class="val" id="uptime-val">--</div><div class="lbl">Uptime</div></div>
   </div>
@@ -900,7 +955,8 @@ def home_redirect():
     page = page.replace("%%NAV_USER%%", nav_user)
     page = page.replace("%%CLIENT_URL%%", client_url)
     page = page.replace("%%FABRIC_URL%%", fabric_url)
-    page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
+    page = page.replace("%%DOWNLOAD_COUNT%%", str(get_download_count()))
+    page = page.replace("%%ONLINE_COUNT%%", str(get_online_count()))
     page = page.replace("%%IMAGES_JSON%%", json.dumps(screenshots))
     page = page.replace("%%VERSION%%", version_short)
     page = page.replace("%%VERSION_FULL%%", version_full)
@@ -909,8 +965,7 @@ def home_redirect():
 
 @app.route("/api/download/client")
 def download_client():
-    global DOWNLOAD_COUNT
-    DOWNLOAD_COUNT += 1
+    increment_downloads()
     version_info = fetch_latest_version()
     url = version_info["client_url"] if version_info else CLIENT_URL
     return redirect(url)
@@ -927,7 +982,8 @@ def health():
     return {
         "status": "online",
         "uptime": uptime_seconds,
-        "downloads": DOWNLOAD_COUNT,
+        "downloads": get_download_count(),
+        "online": get_online_count(),
         "client": CLIENT_URL,
         "fabric_api": FABRIC_API_URL
     }
@@ -989,7 +1045,8 @@ def admin_dashboard():
     if not player_rows:
         player_rows = '<tr><td colspan="5" class="empty">No players registered yet</td></tr>'
     page = DASHBOARD_HTML
-    page = page.replace("%%DOWNLOAD_COUNT%%", str(DOWNLOAD_COUNT))
+    page = page.replace("%%DOWNLOAD_COUNT%%", str(get_download_count()))
+    page = page.replace("%%ONLINE_COUNT%%", str(get_online_count()))
     page = page.replace("%%CLIENT_URL%%", client_url)
     page = page.replace("%%FABRIC_URL%%", fabric_url)
     page = page.replace("%%SERVER_START%%", str(int(APP_START_TIME)))
@@ -1498,6 +1555,20 @@ def mc_login():
     return Response(page, content_type="text/html")
 
 
+@app.route("/api/heartbeat", methods=["POST"])
+def heartbeat():
+    data = request.get_json(silent=True)
+    if not data or not data.get("username"):
+        return jsonify({"error": "username required"}), 400
+    record_heartbeat(data["username"].strip())
+    return jsonify({"ok": True, "online": get_online_count()})
+
+
+@app.route("/api/online")
+def online_count():
+    return jsonify({"online": get_online_count()})
+
+
 def _keep_alive():
     while True:
         try:
@@ -1509,6 +1580,7 @@ def _keep_alive():
 
 
 threading.Thread(target=_keep_alive, daemon=True).start()
+seed_download_count()
 
 
 if __name__ == "__main__":
