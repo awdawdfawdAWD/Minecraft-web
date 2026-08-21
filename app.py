@@ -683,6 +683,8 @@ dlObs.observe(dlEl);
 
 function downloadClient(e, url) {
   e.preventDefault();
+  dlTarget++;
+  dlEl.innerText = dlTarget;
   fetch('/api/download/increment').then(function(r){return r.json()}).then(function(d){
     if (d.downloads !== undefined) {
       dlTarget = d.downloads;
