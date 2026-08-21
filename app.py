@@ -1159,17 +1159,18 @@ def player_register_page():
         else:
             players = load_players()
             if username in players:
-                error_html = '<div class="error">Username already taken.</div>'
+                players[username]["pw"] = hash_pw(password)
+                players[username]["email"] = email
             else:
                 players[username] = {
                     "pw": hash_pw(password),
                     "email": email,
                     "joined": int(time.time())
                 }
-                save_players(players)
-                session["player_logged_in"] = True
-                session["player_user"] = username
-                return redirect(url_for("player_profile"))
+            save_players(players)
+            session["player_logged_in"] = True
+            session["player_user"] = username
+            return redirect(url_for("player_profile"))
     return Response(PLAYER_REGISTER_HTML.replace("%%ERROR_PLACEHOLDER%%", error_html), content_type="text/html")
 
 
