@@ -1071,6 +1071,7 @@ button:hover{background:#9333ea;transform:translateY(-1px);box-shadow:0 6px 20px
     <button type="submit">sign in</button>
   </form>
   <a href="/player-register" class="bottom-link">Don't have an account? Register</a>
+  <a href="/login" class="bottom-link" style="color:#a855f7">You're an admin? Staff Login</a>
   <a href="/" class="back">&larr; back to site</a>
 </div>
 </body>
