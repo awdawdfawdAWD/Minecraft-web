@@ -59,7 +59,7 @@ class GitHubStorage:
         if method in ("PUT", "POST"):
             body = {"message": message or f"Update {path}", "branch": "main"}
             if content is not None:
-                body["content"] = base64.b64encode(content.encode()).encode().decode()
+                body["content"] = base64.b64encode(content.encode()).decode()
             if path in self.shas:
                 body["sha"] = self.shas[path]
             data = json.dumps(body).encode()
