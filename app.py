@@ -459,7 +459,7 @@ section{padding:120px 40px 80px;max-width:1100px;margin:0 auto}
   </div>
 </div>
 <section class="hero">
-  <div class="hero-tag">%%VERSION%% stable release</div>
+  <div class="hero-tag" id="hero-version">%%VERSION%% stable release</div>
   <h1>unkk<br><em>client</em></h1>
   <p class="hero-desc">A fabric-based minecraft client made for people who actually care about how the game looks and feels. built different.</p>
   <div class="hero-actions">
@@ -664,6 +664,7 @@ animTrail();
 var dlEl = document.getElementById('dl-count');
 var onlineEl = document.getElementById('online-count');
 var versionEl = document.getElementById('version-display');
+var heroVersionEl = document.getElementById('hero-version');
 var dlTarget = %%DOWNLOAD_COUNT%%;
 var dlAnimated = false;
 function animateCount(el, target) {
@@ -689,7 +690,10 @@ function liveUpdate() {
     if (d.online !== undefined && onlineEl) onlineEl.innerText = d.online;
   }).catch(function(){});
   fetch('/api/version').then(function(r){return r.json()}).then(function(d){
-    if (d.version && versionEl) versionEl.innerText = d.version;
+    if (d.version) {
+      if (versionEl) versionEl.innerText = d.version;
+      if (heroVersionEl) heroVersionEl.innerText = d.version + ' stable release';
+    }
   }).catch(function(){});
 }
 setInterval(liveUpdate, 15000);
