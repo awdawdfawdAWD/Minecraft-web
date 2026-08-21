@@ -1417,6 +1417,30 @@ def player_check_hwid():
     })
 
 
+@app.route("/api/player/info", methods=["POST"])
+def player_info():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    username = data.get("username", "").strip()
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    players = load_players()
+    player = players.get(username)
+    if not player:
+        return jsonify({"error": "player not found"}), 404
+    joined = time.strftime("%b %d, %Y", time.gmtime(player.get("joined", 0)))
+    hwid = player.get("hwid", "")
+    email = player.get("email", "")
+    return jsonify({
+        "username": username,
+        "email": email,
+        "joined": joined,
+        "hwid": hwid,
+        "status": "Active"
+    })
+
+
 @app.route("/mc-login", methods=["GET", "POST"])
 def mc_login():
     token = request.args.get("token", "")
